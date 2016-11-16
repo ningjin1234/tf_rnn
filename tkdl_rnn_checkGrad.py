@@ -2,6 +2,7 @@ from tkdl_util import *
 
 def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None, bias_trainable=False, learningRate=0.1):
     tf.reset_default_graph()
+    tf.set_random_seed(32513)
     inputTokens = tf.placeholder(tf.int32, [batchSize, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [batchSize])
     targets = tf.placeholder(tf.float64, [batchSize])
@@ -60,7 +61,6 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray)
     feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
     with tf.Session() as sess:
-        tf.set_random_seed(32513)
         sess.run(initAll)
         l = sess.run(loss, feed_dict=feed_dict)
         print 'loss: %f' % l
