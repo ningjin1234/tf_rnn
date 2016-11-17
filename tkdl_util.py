@@ -48,6 +48,22 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
                 ids.append(0)
     return ids
 
+def writeWeights(matrices, layerIdList, fname):
+    assert len(matrices)==len(layerIdList)
+    nextWidInlayer = dict()
+    with open(fname, 'w') as fout:
+        fout.write('layerId\tweightId\tvalue\n')
+        for i in xrange(len(matrices)):
+            layerId = layerIdList[i]
+            if not layerId in nextWidInlayer:
+                nextWidInlayer[layerId] = 0
+            wid = nextWidInlayer[layerId]
+            reshaped = np.reshape(matrices[i], (-1))
+            for v in reshaped:
+                fout.write('%d\t%d\t%.12f\n' % (layerId, wid, v))
+                wid += 1
+            nextWidInlayer[layerId] = wid
+
 class TestTkdlUtil(unittest.TestCase):
     def testLoadEmbedding(self):
         token2Id, embeddingArray = readEmbeddingFile('data/toy_embeddings.txt')
