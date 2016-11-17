@@ -1,0 +1,10 @@
+term	e1
+apple	2.0
+orange	1.0
+blue	0.0
+google	0.0
+company	0.0
+fruit	8.0
+color	0.125
+is	0.125
+a	0.125

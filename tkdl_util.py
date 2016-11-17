@@ -25,10 +25,12 @@ def readEmbeddingFile(fname, hasHeader=True, delimiter='\t'):
             for i in xrange(1, len(splitted)):
                 emb[i-1] = float(splitted[i])
             embeddings.append(emb)
-    embeddingArray = np.asarray(embeddings)
+    embeddingArray = [None for v in embeddings]
     tokens = sorted(token2Id.keys())
     for i in xrange(len(tokens)):
+        embeddingArray[i] = embeddings[token2Id[tokens[i]]]
         token2Id[tokens[i]] = i
+    embeddingArray = np.asarray(embeddingArray)
     return token2Id, embeddingArray
 
 # input is a list of strings where each element is one token
@@ -48,7 +50,7 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
                 ids.append(0)
     return ids
 
-def writeWeights(matrices, layerIdList, fname):
+def writeWeights(matrices, layerIdList, fname, breakdownDict={}):
     assert len(matrices)==len(layerIdList)
     nextWidInlayer = dict()
     with open(fname, 'w') as fout:
@@ -58,11 +60,23 @@ def writeWeights(matrices, layerIdList, fname):
             if not layerId in nextWidInlayer:
                 nextWidInlayer[layerId] = 0
             wid = nextWidInlayer[layerId]
-            reshaped = np.reshape(matrices[i], (-1))
-            for v in reshaped:
-                fout.write('%d\t%d\t%.12f\n' % (layerId, wid, v))
-                wid += 1
+            if i not in breakdownDict:
+                writeWeightsAux(fout, layerId, wid, matrices[i])
+            else:
+                m1Dim = breakdownDict[i]
+                mt = np.transpose(matrices[i])
+                m1 = mt[:, :m1Dim]
+                m2 = mt[:, m1Dim:]
+                wid = writeWeightsAux(fout, layerId, wid, m1)
+                wid = writeWeightsAux(fout, layerId, wid, m2)
             nextWidInlayer[layerId] = wid
+
+def writeWeightsAux(fout, layerId, wid, matrix):
+    reshaped = np.reshape(matrix, (-1))
+    for v in reshaped:
+        fout.write('%d\t%d\t%.12f\n' % (layerId, wid, v))
+        wid += 1
+    return wid
 
 class TestTkdlUtil(unittest.TestCase):
     def testLoadEmbedding(self):
@@ -73,6 +87,8 @@ class TestTkdlUtil(unittest.TestCase):
         self.assertEquals(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id)), [6, 7, 9, 9, 4])
         self.assertEquals(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=4), [6, 7, 9, 9])
         self.assertEquals(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=7), [6, 7, 9, 9, 4, 0, 0])
+        self.assertEquals(embeddingArray[token2Id['apple']].tolist(), [2.,1.,0.])
+        self.assertEquals(embeddingArray[token2Id['fruit']].tolist(), [8.,0.25,0.125])
         print 'testLoadEmbedding passed'
 
 # if __name__ == "__main__":
