@@ -108,8 +108,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
 
 docs = [['apple', 'is', 'a', 'company'], ['google', 'is', 'another', 'big', 'company']]
 labels = [[0.6], [0.7]]
-docs = [['apple', 'is', 'a', 'company']]
-labels = [[0.6]]
-docs = [['google', 'is', 'company']]
-labels = [[0.7]]
+# docs = [['apple', 'is', 'a', 'company']]
+# labels = [[0.6]]
+# docs = [['google', 'is', 'company']]
+# labels = [[0.7]]
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt', initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt')
