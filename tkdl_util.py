@@ -54,14 +54,14 @@ def writeWeights(matrices, layerIdList, fname, breakdownDict={}):
     assert len(matrices)==len(layerIdList)
     nextWidInlayer = dict()
     with open(fname, 'w') as fout:
-        fout.write('layerId\tweightId\tvalue\n')
+        fout.write('_LayerID_\t_WeightID_\t_Weight_\n')
         for i in xrange(len(matrices)):
             layerId = layerIdList[i]
             if not layerId in nextWidInlayer:
                 nextWidInlayer[layerId] = 0
             wid = nextWidInlayer[layerId]
             if i not in breakdownDict:
-                writeWeightsAux(fout, layerId, wid, matrices[i])
+                wid = writeWeightsAux(fout, layerId, wid, matrices[i])
             else:
                 m1Dim = breakdownDict[i]
                 mt = np.transpose(matrices[i])
