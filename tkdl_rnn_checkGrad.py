@@ -5,7 +5,7 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     tf.set_random_seed(32513)
     inputTokens = tf.placeholder(tf.int32, [batchSize, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [batchSize])
-    targets = tf.placeholder(tf.float64, [batchSize])
+    targets = tf.placeholder(tf.float64, [batchSize, 1])
     rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
     # initState = rnnCell.zero_state(batchSize, tf.float64)
     # initState = tf.get_variable("initState", [batchSize, nNeurons], dtype=tf.float64, trainable=True)
@@ -29,7 +29,7 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     outputW = tf.get_variable("outputW", [nNeurons, 1], dtype=tf.float64)
     outputB = tf.get_variable("outputB", [1], dtype=tf.float64)
     prediction = tf.add(tf.matmul(outputs, outputW), outputB)
-    loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/batchSize)
+    loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2)
 
     lr = tf.Variable(learningRate, trainable=False)
     tvars = tf.trainable_variables()
@@ -46,18 +46,19 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     gradients = optimizer.compute_gradients(loss, var_list=tvars) # for debugging purpose
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.initialize_all_variables()
-    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, raw_outputs
+    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, tf.pow(prediction-targets, 2)/2
 
 def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trainedWeightFile=None):
     assert len(docs) == len(labels)
     batchSize = len(docs)
     maxNumSteps = 0
     lens = []
-    for doc in docs:
-        lens.append(len(doc))
-        if len(doc) > maxNumSteps:
-            maxNumSteps = len(doc)
     token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
+    for doc in docs:
+        idList = tokens2ids(doc, token2Id)
+        lens.append(len(idList))
+        if len(idList) > maxNumSteps:
+            maxNumSteps = len(idList)
     inputIds = []
     for doc in docs:
         ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
@@ -65,7 +66,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
     inputIds = np.asarray(inputIds, dtype=np.int32)
     lens = np.asarray(lens, dtype=np.int32)
     embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
-    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, raw = getRnnRegressionOps(batchSize=batchSize, maxNumSteps=maxNumSteps, 
+    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, debugInfo = getRnnRegressionOps(batchSize=batchSize, maxNumSteps=maxNumSteps, 
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray)
     feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
     with tf.Session() as sess:
@@ -78,7 +79,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
             ws = sess.run(tf.trainable_variables())
             writeWeights(np.take(ws, [1,0,3,4]), [1,1,2,2], initWeightFile, breakdownDict={0:len(embeddingArray[0])})
         l = sess.run(loss, feed_dict=feed_dict)
-        print 'loss before training: %f' % l
+        print 'loss before training: %.12f' % l
         # for v in tf.trainable_variables():
         #     val = sess.run(v)
         #     print v.name
@@ -94,18 +95,21 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # r = sess.run(raw, feed_dict=feed_dict)
         # print 'raw outputs'
         # print r
+        print sess.run(gradients, feed_dict=feed_dict)
         sess.run(learningStep, feed_dict=feed_dict)
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             writeWeights(np.take(ws, [1,0,3,4]), [1,1,2,2], trainedWeightFile, breakdownDict={0:len(embeddingArray[0])})
         l = sess.run(loss, feed_dict=feed_dict)
-        print 'loss after training: %f' % l
+        print 'loss after training: %.12f' % l
         for v in tf.trainable_variables():
             print v.name
             print sess.run(v)
 
 docs = [['apple', 'is', 'a', 'company'], ['google', 'is', 'another', 'big', 'company']]
-labels = [0.6, 0.7]
-# docs = [['apple', 'is', 'a', 'company']]
-# labels = [0.6]
+labels = [[0.6], [0.7]]
+docs = [['apple', 'is', 'a', 'company']]
+labels = [[0.6]]
+docs = [['google', 'is', 'company']]
+labels = [[0.7]]
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt', initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt')
