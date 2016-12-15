@@ -19,15 +19,15 @@ def readEmbeddingFile(fname, hasHeader=True, delimiter='\t'):
                 ndim = len(splitted) - 1
             else:
                 assert ndim == len(splitted)-1
-            emb = [0 for i in xrange(len(splitted)-1)]
+            emb = [0 for i in range(len(splitted)-1)]
             tid = len(embeddings)
             token2Id[term] = tid
-            for i in xrange(1, len(splitted)):
+            for i in range(1, len(splitted)):
                 emb[i-1] = float(splitted[i])
             embeddings.append(emb)
     embeddingArray = [None for v in embeddings]
     tokens = sorted(token2Id.keys())
-    for i in xrange(len(tokens)):
+    for i in range(len(tokens)):
         embeddingArray[i] = embeddings[token2Id[tokens[i]]]
         token2Id[tokens[i]] = i
     embeddingArray = np.asarray(embeddingArray)
@@ -46,7 +46,7 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
         if len(ids) > maxNumSteps:
             ids = ids[:maxNumSteps]
         elif len(ids) < maxNumSteps:
-            for i in xrange(maxNumSteps-len(ids)):
+            for i in range(maxNumSteps-len(ids)):
                 ids.append(0)
     return ids
 
@@ -55,7 +55,7 @@ def writeWeights(matrices, layerIdList, fname, breakdownDict={}):
     nextWidInlayer = dict()
     with open(fname, 'w') as fout:
         fout.write('_LayerID_\t_WeightID_\t_Weight_\n')
-        for i in xrange(len(matrices)):
+        for i in range(len(matrices)):
             layerId = layerIdList[i]
             if not layerId in nextWidInlayer:
                 nextWidInlayer[layerId] = 0
@@ -82,14 +82,14 @@ class TestTkdlUtil(unittest.TestCase):
     def testLoadEmbedding(self):
         token2Id, embeddingArray = readEmbeddingFile('data/toy_embeddings.txt')
         testSeqs = [['apple', 'is', 'a', 'company'], ['google', 'is', 'another', 'big', 'company']]
-        self.assertEquals(tokens2ids(testSeqs[0], token2Id), [1, 7, 0, 4])
-        self.assertEquals(tokens2ids(testSeqs[1], token2Id), [6, 7, 4])
-        self.assertEquals(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id)), [6, 7, 9, 9, 4])
-        self.assertEquals(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=4), [6, 7, 9, 9])
-        self.assertEquals(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=7), [6, 7, 9, 9, 4, 0, 0])
-        self.assertEquals(embeddingArray[token2Id['apple']].tolist(), [2.,1.,0.])
-        self.assertEquals(embeddingArray[token2Id['fruit']].tolist(), [8.,0.25,0.125])
-        print 'testLoadEmbedding passed'
+        self.assertEqual(tokens2ids(testSeqs[0], token2Id), [1, 7, 0, 4])
+        self.assertEqual(tokens2ids(testSeqs[1], token2Id), [6, 7, 4])
+        self.assertEqual(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id)), [6, 7, 9, 9, 4])
+        self.assertEqual(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=4), [6, 7, 9, 9])
+        self.assertEqual(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=7), [6, 7, 9, 9, 4, 0, 0])
+        self.assertEqual(embeddingArray[token2Id['apple']].tolist(), [2.,1.,0.])
+        self.assertEqual(embeddingArray[token2Id['fruit']].tolist(), [8.,0.25,0.125])
+        print('testLoadEmbedding passed')
 
 # if __name__ == "__main__":
 #     unittest.main()

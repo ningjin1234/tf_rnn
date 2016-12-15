@@ -11,7 +11,7 @@ def getGruRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     # initState = rnnCell.zero_state(batchSize, tf.float64)
     # initState = tf.get_variable("initState", [batchSize, nNeurons], dtype=tf.float64, trainable=True)
     initState = tf.get_variable("initState", [nNeurons], dtype=tf.float64, trainable=True)
-    initStates = tf.concat(0, [initState for i in xrange(batchSize)])
+    initStates = tf.concat(0, [initState for i in range(batchSize)])
     initStates = tf.reshape(initStates, [-1, nNeurons])
 
     embedding = tf.Variable(initEmbeddings, name='inputEmbeddings', trainable=False, dtype=tf.float64)
@@ -80,7 +80,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
             ws = sess.run(tf.trainable_variables())
             writeWeights(np.take(ws, [1,0,3,4]), [1,1,2,2], initWeightFile, breakdownDict={0:len(embeddingArray[0])})
         l = sess.run(loss, feed_dict=feed_dict)
-        print 'loss before training: %.12f' % l
+        print('loss before training: %.12f' % l)
         # for v in tf.trainable_variables():
         #     val = sess.run(v)
         #     print v.name
@@ -96,16 +96,16 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # r = sess.run(raw, feed_dict=feed_dict)
         # print 'raw outputs'
         # print r
-        print sess.run(gradients, feed_dict=feed_dict)
+        print(sess.run(gradients, feed_dict=feed_dict))
         sess.run(learningStep, feed_dict=feed_dict)
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             writeWeights(np.take(ws, [1,0,3,4]), [1,1,2,2], trainedWeightFile, breakdownDict={0:len(embeddingArray[0])})
         l = sess.run(loss, feed_dict=feed_dict)
-        print 'loss after training: %.12f' % l
+        print('loss after training: %.12f' % l)
         for v in tf.trainable_variables():
-            print v.name
-            print sess.run(v)
+            print(v.name)
+            print(sess.run(v))
 
 docs = [['apple', 'is', 'a', 'company'], ['google', 'is', 'another', 'big', 'company']]
 labels = [[0.6], [0.7]]
