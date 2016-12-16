@@ -1,28 +1,26 @@
 from tkdl_util import *
 
-def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None, bias_trainable=False, learningRate=0.1):
+def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None, bias_trainable=True, learningRate=0.1):
     tf.reset_default_graph()
     tf.set_random_seed(32513)
     inputTokens = tf.placeholder(tf.int32, [batchSize, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [batchSize])
     targets = tf.placeholder(tf.float64, [batchSize, 1])
     rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
-    # initState = rnnCell.zero_state(batchSize, tf.float64)
-    # initState = tf.get_variable("initState", [batchSize, nNeurons], dtype=tf.float64, trainable=True)
-    initState = tf.get_variable("initState", [nNeurons], dtype=tf.float64, trainable=True)
-    initStates = tf.concat(0, [initState for i in range(batchSize)])
-    initStates = tf.reshape(initStates, [-1, nNeurons])
+    # keep this code for future reference: training initial states
+    # initState = tf.get_variable("initState", [nNeurons], dtype=tf.float64, trainable=True)
+    # initStates = tf.concat(0, [initState for i in range(batchSize)])
+    # initStates = tf.reshape(initStates, [-1, nNeurons])
 
     embedding = tf.Variable(initEmbeddings, name='inputEmbeddings', trainable=False, dtype=tf.float64)
     inputData = tf.nn.embedding_lookup(embedding, inputTokens)
 
     raw_outputs, last_states = tf.nn.dynamic_rnn(
         cell=rnnCell,
-        initial_state=initStates,
         dtype=tf.float64,
         sequence_length=inputLens,
         inputs=inputData)
-        
+
     flattened_outputs = tf.reshape(raw_outputs, [-1, nNeurons])
     index = tf.range(0, batchSize) * maxNumSteps + inputLens - 1
     outputs = tf.gather(flattened_outputs, index)
@@ -33,15 +31,12 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
 
     lr = tf.Variable(learningRate, trainable=False)
     tvars = tf.trainable_variables()
-    '''
-    tvars[0] is initial hidden states
-    tvars[1] is RNN weight matrix
-    tvars[2] is RNN bias (may be excluded from training)
-    tvars[3] is output weight matrix
-    tvars[4] is output bias
-    '''
+    # tvars[0] is RNN weight matrix
+    # tvars[1] is RNN bias (may be excluded from training)
+    # tvars[2] is output weight matrix
+    # tvars[3] is output bias
     if not bias_trainable:
-        tvars = np.take(tvars, [0,1,3,4]).tolist() # exclude RNN bias from training
+        tvars = np.take(tvars, [0,2,3]).tolist() # exclude RNN bias from training
     optimizer = tf.train.GradientDescentOptimizer(lr)
     gradients = optimizer.compute_gradients(loss, var_list=tvars) # for debugging purpose
     learningStep = optimizer.minimize(loss, var_list=tvars)
@@ -66,7 +61,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
     inputIds = np.asarray(inputIds, dtype=np.int32)
     lens = np.asarray(lens, dtype=np.int32)
     embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
-    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, debugInfo = getRnnRegressionOps(batchSize=batchSize, maxNumSteps=maxNumSteps, 
+    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, debugInfo = getRnnRegressionOps(batchSize=batchSize, maxNumSteps=maxNumSteps,
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray)
     feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
     with tf.Session() as sess:
@@ -77,7 +72,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         outBias = []
         if initWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
-            writeWeights(np.take(ws, [1,0,3,4]), [1,1,2,2], initWeightFile, breakdownDict={0:len(embeddingArray[0])})
+            writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], initWeightFile)
         l = sess.run(loss, feed_dict=feed_dict)
         print('loss before training: %.12f' % l)
         # for v in tf.trainable_variables():
@@ -95,11 +90,11 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # r = sess.run(raw, feed_dict=feed_dict)
         # print 'raw outputs'
         # print r
-        print(sess.run(gradients, feed_dict=feed_dict))
+        # print(sess.run(gradients, feed_dict=feed_dict))
         sess.run(learningStep, feed_dict=feed_dict)
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
-            writeWeights(np.take(ws, [1,0,3,4]), [1,1,2,2], trainedWeightFile, breakdownDict={0:len(embeddingArray[0])})
+            writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], trainedWeightFile)
         l = sess.run(loss, feed_dict=feed_dict)
         print('loss after training: %.12f' % l)
         for v in tf.trainable_variables():
