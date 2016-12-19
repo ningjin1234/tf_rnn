@@ -1,6 +1,7 @@
 from tkdl_util import *
 
-def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None, bias_trainable=True, learningRate=0.1):
+def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None, 
+						bias_trainable=True, learningRate=0.1):
     tf.reset_default_graph()
     tf.set_random_seed(32513)
     inputTokens = tf.placeholder(tf.int32, [batchSize, maxNumSteps])
