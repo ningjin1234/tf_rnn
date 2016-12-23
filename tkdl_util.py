@@ -74,7 +74,7 @@ def writeWeights(matrices, layerIdList, fname, breakdownDict={}):
 def writeWeightsAux(fout, layerId, wid, matrix):
     reshaped = np.reshape(matrix, (-1))
     for v in reshaped:
-        fout.write('%d\t%d\t%.12f\n' % (layerId, wid, v))
+        fout.write('%d\t%d\t%s\n' % (layerId, wid, str(v)))
         wid += 1
     return wid
 
