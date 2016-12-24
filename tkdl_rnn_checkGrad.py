@@ -71,6 +71,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray,
                                                                                                    learningRate=lr/batchSize, rnnType=rnnType)
     feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
+    print('learning rate: %f' % lr)
+    print('rnn type: %s' % rnnType)
     with tf.Session() as sess:
         sess.run(initAll)
         rnnMatrix = []
@@ -97,19 +99,19 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # r = sess.run(raw, feed_dict=feed_dict)
         # print 'raw outputs'
         # print r
-        print('prediction before training:')
-        print(sess.run(prediction, feed_dict=feed_dict))
+        # print('prediction before training:')
+        # print(sess.run(prediction, feed_dict=feed_dict))
         for i in range(epochs):
             sess.run(learningStep, feed_dict=feed_dict)
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/batchSize))
-        print('prediction after training:')
-        print(sess.run(prediction, feed_dict=feed_dict))
+        # print('prediction after training:')
+        # print(sess.run(prediction, feed_dict=feed_dict))
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], trainedWeightFile)
-        for v in tf.trainable_variables():
-            print(v.name)
-            print(sess.run(v))
+        # for v in tf.trainable_variables():
+        #     print(v.name)
+        #     print(sess.run(v))
 
 doc1 = ['apple','is','a','company']
 doc2 = ['google','is','another','big','company']
@@ -132,3 +134,6 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
          initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt',
          lr=0.3, epochs=10, rnnType='normal')
+trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+         initWeightFile='tmp_outputs/reverse_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_rnn_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='reverse')
