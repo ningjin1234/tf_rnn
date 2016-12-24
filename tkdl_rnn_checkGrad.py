@@ -27,7 +27,10 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
         pass    # TODO: implement bidirectional RNN
 
     flattened_outputs = tf.reshape(raw_outputs, [-1, nNeurons])
-    index = tf.range(0, batchSize) * maxNumSteps + inputLens - 1
+    if rnnType.lower() == 'normal':
+        index = tf.range(0, batchSize) * maxNumSteps + inputLens - 1
+    elif rnnType.lower() == 'reversed' or rnnType.lower() == 'reverse':
+        index = tf.range(0, batchSize) * maxNumSteps
     outputs = tf.gather(flattened_outputs, index)
     outputW = tf.get_variable("outputW", [nNeurons, 1], dtype=tf.float64)
     outputB = tf.get_variable("outputB", [1], dtype=tf.float64)
@@ -99,8 +102,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # r = sess.run(raw, feed_dict=feed_dict)
         # print 'raw outputs'
         # print r
-        # print('prediction before training:')
-        # print(sess.run(prediction, feed_dict=feed_dict))
+        print('flattened_outputs before training:')
+        print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             sess.run(learningStep, feed_dict=feed_dict)
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/batchSize))
@@ -119,21 +122,23 @@ doc3 = ['orange','is','a','fruit']
 doc4 = ['apple','google','apple','google','apple','google','apple','google']
 doc5 = ['blue', 'is', 'a', 'color']
 docs = [doc1, doc2, doc3, doc4, doc5]
+# docs = [doc1]
 # docs = [reversed(doc1), reversed(doc2), reversed(doc3), reversed(doc4), reversed(doc5)]
 # docs = [['apple','is'], ['google','is'],['orange','is']]
 # docs = [['apple'], ['google'],['orange'],['company'],['fruit']]
 # docs = [['apple', 'is', 'a'], ['google', 'is']]
 # labels = [[0.6], [0.7], [0.8]]
 labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
+# labels = [[0.6]]
 # docs = [['apple', 'is', 'a', 'company']]
 # labels = [[0.6]]
 # docs = [['google', 'is', 'company']]
 # labels = [[0.7]]
 # docs = [['apple','google','apple','google','apple','google','apple','google']]
 # labels = [[0.01]]
-trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='normal')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal')
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
          initWeightFile='tmp_outputs/reverse_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_rnn_trained_weights.txt',
          lr=0.3, epochs=10, rnnType='reverse')
