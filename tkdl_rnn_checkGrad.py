@@ -89,10 +89,18 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         rnnInitState = []
         outMatrix = []
         outBias = []
+        weightDims = []
+        if stackedDimList is None or len(stackedDimList) == 0:
+            nLayers = 2
+        else:
+            nLayers = len(stackedDimList) + 1
+        for i in range(nLayers):
+            weightDims.append(i+1)
+            weightDims.append(i+1)
         if initWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], initWeightFile)
-            writeWeights(ws, [1,1,2,2,3,3], initWeightFile)
+            writeWeights(ws, weightDims, initWeightFile)
         l = sess.run(loss, feed_dict=feed_dict)
         print('loss before training: %.14g' % (l/batchSize))
         # for v in tf.trainable_variables():
@@ -122,7 +130,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], trainedWeightFile)
-            writeWeights(ws, [1,1,2,2,3,3], trainedWeightFile)
+            writeWeights(ws, weightDims, trainedWeightFile)
         # for v in tf.trainable_variables():
         #     print(v.name)
         #     print(sess.run(v))
@@ -156,4 +164,4 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 #          lr=0.3, epochs=10, rnnType='reverse')
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
          initWeightFile='tmp_outputs/stacked_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5])
+         lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7])
