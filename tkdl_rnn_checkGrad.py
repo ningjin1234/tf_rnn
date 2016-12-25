@@ -2,13 +2,18 @@ from tkdl_util import *
 from tensorflow.python.ops import array_ops
 
 def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None,
-                        bias_trainable=True, learningRate=0.1, rnnType='normal'):
+                        bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[]):
     tf.reset_default_graph()
     tf.set_random_seed(32513)
     inputTokens = tf.placeholder(tf.int32, [batchSize, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [batchSize])
     targets = tf.placeholder(tf.float64, [batchSize, 1])
-    rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
+    if stackedDimList is None or len(stackedDimList) == 0:
+        rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
+    else:
+        rnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
+        rnnCell = tf.nn.rnn_cell.MultiRNNCell(rnnCellList)
+        nNeurons = stackedDimList[-1]
     # keep this code for future reference: training initial states
     # initState = tf.get_variable("initState", [nNeurons], dtype=tf.float64, trainable=True)
     # initStates = tf.concat(0, [initState for i in range(batchSize)])
@@ -43,15 +48,16 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     # tvars[1] is RNN bias (may be excluded from training)
     # tvars[2] is output weight matrix
     # tvars[3] is output bias
-    if not bias_trainable:
-        tvars = np.take(tvars, [0,2,3]).tolist() # exclude RNN bias from training
+    # if not bias_trainable:
+    #     tvars = np.take(tvars, [0,2,3]).tolist() # exclude RNN bias from training
     optimizer = tf.train.GradientDescentOptimizer(lr)
     gradients = optimizer.compute_gradients(loss, var_list=tvars) # for debugging purpose
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.global_variables_initializer()
     return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, flattened_outputs
 
-def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1, rnnType='normal'):
+def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
+             rnnType='normal', stackedDimList=[]):
     assert len(docs) == len(labels)
     batchSize = len(docs)
     maxNumSteps = 0
@@ -72,7 +78,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
     inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, debugInfo = getRnnRegressionOps(batchSize=batchSize,
                                                                                                    maxNumSteps=maxNumSteps,
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray,
-                                                                                                   learningRate=lr/batchSize, rnnType=rnnType)
+                                                                                                   learningRate=lr/batchSize, rnnType=rnnType,
+                                                                                                   stackedDimList=stackedDimList)
     feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
     print('learning rate: %f' % lr)
     print('rnn type: %s' % rnnType)
@@ -84,7 +91,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         outBias = []
         if initWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
-            writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], initWeightFile)
+            # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], initWeightFile)
+            writeWeights(ws, [1,1,2,2,3,3], initWeightFile)
         l = sess.run(loss, feed_dict=feed_dict)
         print('loss before training: %.14g' % (l/batchSize))
         # for v in tf.trainable_variables():
@@ -102,6 +110,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # r = sess.run(raw, feed_dict=feed_dict)
         # print 'raw outputs'
         # print r
+        print('prediction before training:')
+        print(sess.run(prediction, feed_dict=feed_dict))
         print('flattened_outputs before training:')
         print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
@@ -111,7 +121,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # print(sess.run(prediction, feed_dict=feed_dict))
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
-            writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], trainedWeightFile)
+            # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], trainedWeightFile)
+            writeWeights(ws, [1,1,2,2,3,3], trainedWeightFile)
         # for v in tf.trainable_variables():
         #     print(v.name)
         #     print(sess.run(v))
@@ -122,6 +133,7 @@ doc3 = ['orange','is','a','fruit']
 doc4 = ['apple','google','apple','google','apple','google','apple','google']
 doc5 = ['blue', 'is', 'a', 'color']
 docs = [doc1, doc2, doc3, doc4, doc5]
+# doc1 = ['apple']
 # docs = [doc1]
 # docs = [reversed(doc1), reversed(doc2), reversed(doc3), reversed(doc4), reversed(doc5)]
 # docs = [['apple','is'], ['google','is'],['orange','is']]
@@ -139,6 +151,9 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/reverse_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='reverse')
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/reverse_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='reverse')
+         initWeightFile='tmp_outputs/stacked_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_rnn_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5])
