@@ -51,6 +51,8 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
     return ids
 
 def writeWeights(matrices, layerIdList, fname, breakdownDict={}):
+    if len(matrices)!=len(layerIdList):
+        print(len(matrices), len(layerIdList))
     assert len(matrices)==len(layerIdList)
     nextWidInlayer = dict()
     with open(fname, 'w') as fout:

@@ -2,12 +2,18 @@ from tkdl_util import *
 from tensorflow.python.ops import array_ops
 
 def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None,
-                        bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[]):
+                        bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[],
+                        task='classification'):
     tf.reset_default_graph()
     tf.set_random_seed(32513)
     inputTokens = tf.placeholder(tf.int32, [batchSize, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [batchSize])
-    targets = tf.placeholder(tf.float64, [batchSize, 1])
+    if task.lower() in ['class', 'classification']:
+        targets = tf.placeholder(tf.float64, [batchSize, 1])
+    elif task.lower() in ['numericlabeling', 'numl']:
+        targets = tf.placeholder(tf.float64, [batchSize, maxNumSteps])
+    else:
+        assert(False)
     if stackedDimList is None or len(stackedDimList) == 0:
         rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
     else:
@@ -19,8 +25,12 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     # initStates = tf.concat(0, [initState for i in range(batchSize)])
     # initStates = tf.reshape(initStates, [-1, nNeurons])
 
-    embedding = tf.Variable(initEmbeddings, name='inputEmbeddings', trainable=False, dtype=tf.float64)
-    inputData = tf.nn.embedding_lookup(embedding, inputTokens)
+    if initEmbeddings is not None:
+        embedding = tf.Variable(initEmbeddings, name='inputEmbeddings', trainable=False, dtype=tf.float64)
+        inputData = tf.nn.embedding_lookup(embedding, inputTokens)
+    else:
+        inputTokens = tf.placeholder(tf.float64, [batchSize, maxNumSteps, 1])
+        inputData = inputTokens
 
     if rnnType.lower() == 'normal':
         raw_outputs, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=inputData)
@@ -29,18 +39,42 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
         raw_outputs_r, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=inputDataReversed)
         raw_outputs = array_ops.reverse_sequence(input=raw_outputs_r, seq_lengths=inputLens, seq_dim=1, batch_dim=0)
     elif rnnType.lower() == 'bi' or rnnType.lower() == 'bidirectional':
-        pass    # TODO: implement bidirectional RNN
+        stackedDimList = stackedDimList[:-1]
+        fwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
+        fwRnnCell = tf.nn.rnn_cell.MultiRNNCell(fwRnnCellList)
+        bwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
+        bwRnnCell = tf.nn.rnn_cell.MultiRNNCell(bwRnnCellList)
+        # NOTE: in bidirectional_dynamic_rnn, tensorflow does not concatenate outputs for each layer, it only concatenates the outputs for the last layer
+        tmp_outputs, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell,
+                                                                   dtype=tf.float64, sequence_length=inputLens, inputs=inputData)
+        # NOTE: currently the last layer in a stacked bidirectional RNN model must be a unidirectional recurrent layer;
+        # this is a current limitation of tkdlu
+        fwOutputs = tmp_outputs[0]
+        bwOutputs = tmp_outputs[1]
+        tmp_outputs = tf.concat(2, [fwOutputs, bwOutputs])
+        # print(tmp_outputs.get_shape())
+        rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
+        raw_outputs, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=tmp_outputs)
 
     flattened_outputs = tf.reshape(raw_outputs, [-1, nNeurons])
-    if rnnType.lower() == 'normal':
-        index = tf.range(0, batchSize) * maxNumSteps + inputLens - 1
-    elif rnnType.lower() == 'reversed' or rnnType.lower() == 'reverse':
-        index = tf.range(0, batchSize) * maxNumSteps
-    outputs = tf.gather(flattened_outputs, index)
+    if task.lower() in ['class', 'classification']:
+        if rnnType.lower() in ['reversed', 'reverse']:
+            index = tf.range(0, batchSize) * maxNumSteps
+        else:
+            index = tf.range(0, batchSize) * maxNumSteps + inputLens - 1
+        outputs = tf.gather(flattened_outputs, index)
+    else:
+        outputs = flattened_outputs
+        targets = tf.reshape(targets, [-1, 1])
     outputW = tf.get_variable("outputW", [nNeurons, 1], dtype=tf.float64)
     outputB = tf.get_variable("outputB", [1], dtype=tf.float64)
     prediction = tf.add(tf.matmul(outputs, outputW), outputB)
-    loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2)
+    if task.lower() in ['class', 'classification']:
+        loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2)
+    elif task.lower() in ['numericlabeling', 'numl']:
+        loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2/maxNumSteps)
+    else:
+        assert(False)
 
     lr = tf.Variable(learningRate, trainable=False)
     tvars = tf.trainable_variables()
@@ -57,29 +91,39 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, flattened_outputs
 
 def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
-             rnnType='normal', stackedDimList=[]):
+             rnnType='normal', stackedDimList=[], task='classification'):
     assert len(docs) == len(labels)
     batchSize = len(docs)
     maxNumSteps = 0
     lens = []
-    token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
-    for doc in docs:
-        idList = tokens2ids(doc, token2Id)
-        lens.append(len(idList))
-        if len(idList) > maxNumSteps:
-            maxNumSteps = len(idList)
-    inputIds = []
-    for doc in docs:
-        ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
-        inputIds.append(ids)
-    inputIds = np.asarray(inputIds, dtype=np.int32)
-    lens = np.asarray(lens, dtype=np.int32)
-    embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
+    if embeddingFile is not None:
+        token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
+        for doc in docs:
+            idList = tokens2ids(doc, token2Id)
+            lens.append(len(idList))
+            if len(idList) > maxNumSteps:
+                maxNumSteps = len(idList)
+        inputIds = []
+        for doc in docs:
+            ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
+            inputIds.append(ids)
+        inputIds = np.asarray(inputIds, dtype=np.int32)
+        lens = np.asarray(lens, dtype=np.int32)
+        embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
+    else:
+        lens = [len(doc) for doc in docs]
+        lens = np.asarray(lens, dtype=np.int32)
+        maxNumSteps = max(lens)
+        embeddingArray = None
+        inputIds = np.asarray(docs, dtype=np.float64)
+        inputIds = np.reshape(inputIds, (batchSize, maxNumSteps, 1))
+        labels = np.asarray(labels, dtype=np.float64)
+        labels = np.reshape(labels, (-1, 1))
     inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, debugInfo = getRnnRegressionOps(batchSize=batchSize,
                                                                                                    maxNumSteps=maxNumSteps,
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray,
                                                                                                    learningRate=lr/batchSize, rnnType=rnnType,
-                                                                                                   stackedDimList=stackedDimList)
+                                                                                                   stackedDimList=stackedDimList, task=task)
     feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
     print('learning rate: %f' % lr)
     print('rnn type: %s' % rnnType)
@@ -97,6 +141,20 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         for i in range(nLayers):
             weightDims.append(i+1)
             weightDims.append(i+1)
+        if rnnType.lower() in ['bi', 'bidirectional']:
+            weightDims = []
+            for i in range(len(stackedDimList)-1):
+                weightDims.append(i+len(stackedDimList))
+                weightDims.append(i+len(stackedDimList))
+            for i in range(len(stackedDimList)-1):
+                weightDims.append(i+1)
+                weightDims.append(i+1)
+            weightDims.append(2*len(stackedDimList)-1)
+            weightDims.append(2*len(stackedDimList)-1)
+            weightDims.append(2*len(stackedDimList))
+            weightDims.append(2*len(stackedDimList))
+        for v in tf.trainable_variables():
+            print(v.name)
         if initWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], initWeightFile)
@@ -118,10 +176,10 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # r = sess.run(raw, feed_dict=feed_dict)
         # print 'raw outputs'
         # print r
-        print('prediction before training:')
-        print(sess.run(prediction, feed_dict=feed_dict))
-        print('flattened_outputs before training:')
-        print(sess.run(debugInfo, feed_dict=feed_dict))
+        # print('gradients before training:')
+        # print(sess.run(gradients, feed_dict=feed_dict))
+        # print('flattened_outputs before training:')
+        # print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             sess.run(learningStep, feed_dict=feed_dict)
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/batchSize))
@@ -162,6 +220,15 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/reverse_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='reverse')
-trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/stacked_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7])
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/stacked_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7])
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
+
+inputs = [[-1,2,3,4,5,6], [6,5,4,3,2,1], [5,9,3,7,1,2], [1,2,3,4,2,1]]
+targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
+trainRnn(inputs, targets, 6, None,
+         initWeightFile='tmp_outputs/slbi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_rnn_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7])
