@@ -50,6 +50,58 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
                 ids.append(0)
     return ids
 
+def getLayerName(fullName):
+    cellTypes = ['BasicRNNCell', 'GRUCell', 'output']
+    for ct in cellTypes:
+        if ct in fullName:
+            return fullName[:fullName.find(ct)]
+    return ''
+
+def isMatrix(fullName):
+    if 'Matrix' in fullName or 'outputW' in fullName:
+        return True
+    return False
+# assumes this is from a MultiRNNCell
+def getCellId(fullName):
+    s = 'MultiRNNCell/Cell'
+    i = fullName.find(s) + len(s)
+    return int(fullName[i:i+1])
+
+def writeWeightsWithNames(matrices, variables, stackedDimList, fname):
+    name2Weights = dict()
+    for m, v in zip(matrices, variables):
+        vname = v.name
+        layerName = getLayerName(vname)
+        if layerName not in name2Weights:
+            if 'MultiRNNCell' not in vname:
+                layerId = len(name2Weights) + 1
+            else:
+                cellId = getCellId(vname) + 1
+                if 'FW' in vname:
+                    cellId += len(stackedDimList) - 1
+                layerId = cellId
+            name2Weights[layerName] = (layerId, [], [], layerName)
+        winfo = name2Weights[layerName]
+        if isMatrix(vname):
+            winfo[1].append(m)
+        else:
+            winfo[2].append(m)
+    nextWidInlayer = dict()
+    with open(fname, 'w') as fout:
+        fout.write('_LayerID_\t_WeightID_\t_Weight_\n')
+        for name, winfo in name2Weights.items():
+            layerId = winfo[0]
+            matrices = winfo[1]
+            biases = winfo[2]
+            print(layerId, winfo[3])
+            if not layerId in nextWidInlayer:
+                nextWidInlayer[layerId] = 0
+            matrices = matrices + biases
+            for m in matrices:
+                wid = nextWidInlayer[layerId]
+                wid = writeWeightsAux(fout, layerId, wid, m)
+                nextWidInlayer[layerId] = wid
+
 def writeWeights(matrices, layerIdList, fname, breakdownDict={}):
     if len(matrices)!=len(layerIdList):
         print(len(matrices), len(layerIdList))
