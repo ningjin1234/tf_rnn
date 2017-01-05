@@ -182,6 +182,11 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
             # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], initWeightFile)
             # writeWeights(ws, layerIds, initWeightFile)
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, initWeightFile)
+        # for v,g in zip(tf.trainable_variables(), gradients):
+        #     if not 'Bias' in v.name:
+        #         continue
+        #     print(v.name)
+        #     print(sess.run(g, feed_dict=feed_dict))
         l = sess.run(loss, feed_dict=feed_dict)
         print('loss before training: %.14g' % (l/batchSize))
         # for v in tf.trainable_variables():
@@ -213,18 +218,24 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
             # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], trainedWeightFile)
             # writeWeights(ws, layerIds, trainedWeightFile)
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, trainedWeightFile)
-        # for v in tf.trainable_variables():
+        for v in tf.trainable_variables():
+            print(v.name)
+            print(sess.run(v))
+        # for v,g in zip(tf.trainable_variables(), gradients):
+        #     if not 'Bias' in v.name:
+        #         continue
         #     print(v.name)
-        #     print(sess.run(v))
+        #     print(sess.run(g, feed_dict=feed_dict))
 
-doc1 = ['apple','is','a','company']
-doc2 = ['google','is','another','big','company']
+doc1 = "apple is a company".split()
+doc2 = "google is another big company".split()
 doc3 = ['orange','is','a','fruit']
 doc4 = ['apple','google','apple','google','apple','google','apple','google']
 doc5 = ['blue', 'is', 'a', 'color']
 docs = [doc1, doc2, doc3, doc4, doc5]
 # doc1 = ['apple']
 # docs = [doc1]
+# docs = [doc1, doc2]
 # docs = [reversed(doc1), reversed(doc2), reversed(doc3), reversed(doc4), reversed(doc5)]
 # docs = [['apple','is'], ['google','is'],['orange','is']]
 # docs = [['apple'], ['google'],['orange'],['company'],['fruit']]
@@ -232,6 +243,7 @@ docs = [doc1, doc2, doc3, doc4, doc5]
 # labels = [[0.6], [0.7], [0.8]]
 labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 # labels = [[0.6]]
+# labels = [[0.6], [0.7]]
 # docs = [['apple', 'is', 'a', 'company']]
 # labels = [[0.6]]
 # docs = [['google', 'is', 'company']]
@@ -260,6 +272,21 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 
 
 
-trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/gru_init_weights.txt', trainedWeightFile='tmp_outputs/gru_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='normal', cell='gru')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/gru_init_weights.txt', trainedWeightFile='tmp_outputs/gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', cell='gru')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/reverse_gru_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='reverse', cell='gru')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/stacked_gru_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7], cell='gru')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/bi_gru_init_weights.txt', trainedWeightFile='tmp_outputs/bi_gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7], cell='gru')
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/sl_gru_init_weights.txt', trainedWeightFile='tmp_outputs/sl_gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='gru')
+trainRnn(inputs, targets, 6, None,
+         initWeightFile='tmp_outputs/slbi_gru_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_gru_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='gru')
