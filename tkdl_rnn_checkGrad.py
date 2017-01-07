@@ -19,11 +19,15 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
             rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
         elif cell == 'gru':
             rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=tf.tanh)
+        elif cell == 'lstm':
+            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True)
     else:
         if cell == 'rnn':
             rnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
         elif cell == 'gru':
             rnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
+        elif cell == 'lstm':
+            rnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True) for dim in stackedDimList]
         rnnCell = tf.nn.rnn_cell.MultiRNNCell(rnnCellList)
         nNeurons = stackedDimList[-1]
     # keep this code for future reference: training initial states
@@ -52,6 +56,9 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
         elif cell == 'gru':
             fwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
             bwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
+        elif cell == 'lstm':
+            fwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True) for dim in stackedDimList]
+            bwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True) for dim in stackedDimList]
         fwRnnCell = tf.nn.rnn_cell.MultiRNNCell(fwRnnCellList)
         bwRnnCell = tf.nn.rnn_cell.MultiRNNCell(bwRnnCellList)
         # NOTE: in bidirectional_dynamic_rnn, tensorflow does not concatenate outputs for each layer, it only concatenates the outputs for the last layer
@@ -67,6 +74,8 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
             rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
         elif cell == 'gru':
             rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=tf.tanh)
+        elif cell == 'lstm':
+            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True)
         raw_outputs, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=tmp_outputs)
 
     flattened_outputs = tf.reshape(raw_outputs, [-1, nNeurons])
@@ -287,6 +296,11 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/sl_gru_init_weights.txt', trainedWeightFile='tmp_outputs/sl_gru_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='gru')
-trainRnn(inputs, targets, 6, None,
-         initWeightFile='tmp_outputs/slbi_gru_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_gru_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='gru')
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/slbi_gru_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='gru')
+
+
+trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+         initWeightFile='tmp_outputs/lstm_init_weights.txt', trainedWeightFile='tmp_outputs/lstm_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='normal', cell='lstm')
