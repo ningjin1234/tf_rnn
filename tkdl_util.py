@@ -51,7 +51,7 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
     return ids
 
 def getLayerName(fullName):
-    cellTypes = ['BasicRNNCell', 'GRUCell', 'output']
+    cellTypes = ['BasicRNNCell', 'GRUCell', 'LSTMCell', 'output']
     for ct in cellTypes:
         if ct in fullName:
             return fullName[:fullName.find(ct)]
@@ -59,6 +59,8 @@ def getLayerName(fullName):
 
 def isMatrix(fullName):
     if 'Matrix' in fullName or 'outputW' in fullName:
+        return True
+    elif 'W_0' in fullName or '_diag' in fullName:
         return True
     return False
 # assumes this is from a MultiRNNCell

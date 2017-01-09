@@ -20,14 +20,14 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
         elif cell == 'gru':
             rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=tf.tanh)
         elif cell == 'lstm':
-            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True)
+            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) # default forget bias is 1.0
     else:
         if cell == 'rnn':
             rnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
         elif cell == 'gru':
             rnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
         elif cell == 'lstm':
-            rnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True) for dim in stackedDimList]
+            rnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
         rnnCell = tf.nn.rnn_cell.MultiRNNCell(rnnCellList)
         nNeurons = stackedDimList[-1]
     # keep this code for future reference: training initial states
@@ -57,8 +57,8 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
             fwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
             bwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
         elif cell == 'lstm':
-            fwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True) for dim in stackedDimList]
-            bwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True) for dim in stackedDimList]
+            fwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
+            bwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
         fwRnnCell = tf.nn.rnn_cell.MultiRNNCell(fwRnnCellList)
         bwRnnCell = tf.nn.rnn_cell.MultiRNNCell(bwRnnCellList)
         # NOTE: in bidirectional_dynamic_rnn, tensorflow does not concatenate outputs for each layer, it only concatenates the outputs for the last layer
@@ -75,7 +75,7 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
         elif cell == 'gru':
             rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=tf.tanh)
         elif cell == 'lstm':
-            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True)
+            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True, forget_bias=0.0)
         raw_outputs, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=tmp_outputs)
 
     flattened_outputs = tf.reshape(raw_outputs, [-1, nNeurons])
@@ -110,7 +110,7 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     gradients = optimizer.compute_gradients(loss, var_list=tvars) # for debugging purpose
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.global_variables_initializer()
-    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, flattened_outputs
+    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, last_states
 
 def getLayerIds(stackedDimList, rnnType='normal', cell='rnn'):
     layerIds = []
@@ -171,6 +171,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
                                                                                                    stackedDimList=stackedDimList, task=task,
                                                                                                    cell=cell)
     feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
+    for d in docs:
+        print(d)
     print('learning rate: %f' % lr)
     print('rnn type: %s' % rnnType)
     print('cell type: %s' % cell)
@@ -183,7 +185,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         outBias = []
         layerIds = getLayerIds(stackedDimList, rnnType=rnnType, cell=cell)
         for v in tf.trainable_variables():
-            print(v.name)
+            print(v.name, v.get_shape())
         # for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
         #     print(v.name)
         if initWeightFile is not None:
@@ -198,10 +200,10 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         #     print(sess.run(g, feed_dict=feed_dict))
         l = sess.run(loss, feed_dict=feed_dict)
         print('loss before training: %.14g' % (l/batchSize))
-        # for v in tf.trainable_variables():
-        #     val = sess.run(v)
-        #     print v.name
-        #     print val
+#         for v in tf.trainable_variables():
+#             val = sess.run(v)
+#             print(v.name)
+#             print(val)
         #     if 'RNN' in v.name and 'Matrix' in v.name:
         #         rnnMatrix = val
         #     elif 'initState' in v.name:
@@ -215,8 +217,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # print r
         # print('gradients before training:')
         # print(sess.run(gradients, feed_dict=feed_dict))
-        # print('flattened_outputs before training:')
-        # print(sess.run(debugInfo, feed_dict=feed_dict))
+        print('debugInfo before training:')
+        print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             sess.run(learningStep, feed_dict=feed_dict)
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/batchSize))
@@ -227,9 +229,9 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
             # writeWeights(np.take(ws, [0,1,2,3]), [1,1,2,2], trainedWeightFile)
             # writeWeights(ws, layerIds, trainedWeightFile)
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, trainedWeightFile)
-        for v in tf.trainable_variables():
-            print(v.name)
-            print(sess.run(v))
+#         for v in tf.trainable_variables():
+#             print(v.name)
+#             print(sess.run(v))
         # for v,g in zip(tf.trainable_variables(), gradients):
         #     if not 'Bias' in v.name:
         #         continue
@@ -242,8 +244,8 @@ doc3 = ['orange','is','a','fruit']
 doc4 = ['apple','google','apple','google','apple','google','apple','google']
 doc5 = ['blue', 'is', 'a', 'color']
 docs = [doc1, doc2, doc3, doc4, doc5]
-# doc1 = ['apple']
-# docs = [doc1]
+doc1 = "apple is".split()
+docs = [doc1]
 # docs = [doc1, doc2]
 # docs = [reversed(doc1), reversed(doc2), reversed(doc3), reversed(doc4), reversed(doc5)]
 # docs = [['apple','is'], ['google','is'],['orange','is']]
@@ -251,7 +253,7 @@ docs = [doc1, doc2, doc3, doc4, doc5]
 # docs = [['apple', 'is', 'a'], ['google', 'is']]
 # labels = [[0.6], [0.7], [0.8]]
 labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
-# labels = [[0.6]]
+labels = [[0.6]]
 # labels = [[0.6], [0.7]]
 # docs = [['apple', 'is', 'a', 'company']]
 # labels = [[0.6]]
@@ -303,4 +305,19 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
          initWeightFile='tmp_outputs/lstm_init_weights.txt', trainedWeightFile='tmp_outputs/lstm_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='normal', cell='lstm')
+         lr=0.3, epochs=1, rnnType='normal', cell='lstm')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/reverse_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='reverse', cell='lstm')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/stacked_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7], cell='lstm')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/bi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/bi_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7], cell='lstm')
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/sl_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/sl_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='lstm')
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')

@@ -1,6 +1,8 @@
 from tkdl_util import *
 from tkdl_rnn_cell import *
 
+# this is deprecated; I created this to test the old GRU implementation in tkdl, which has changed to be consistent
+# with TensorFlow's GRU implementation
 def getGruRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=None, bias_trainable=False, learningRate=0.1):
     tf.reset_default_graph()
     tf.set_random_seed(32513)
