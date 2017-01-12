@@ -110,7 +110,7 @@ def getRnnRegressionOps(batchSize=5, maxNumSteps=10, nNeurons=4, initEmbeddings=
     gradients = optimizer.compute_gradients(loss, var_list=tvars) # for debugging purpose
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.global_variables_initializer()
-    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, last_states
+    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, flattened_outputs
 
 def getLayerIds(stackedDimList, rnnType='normal', cell='rnn'):
     layerIds = []
@@ -217,8 +217,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, initWeightFile=None, trained
         # print r
         # print('gradients before training:')
         # print(sess.run(gradients, feed_dict=feed_dict))
-        print('debugInfo before training:')
-        print(sess.run(debugInfo, feed_dict=feed_dict))
+        # print('debugInfo before training:')
+        # print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             sess.run(learningStep, feed_dict=feed_dict)
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/batchSize))
@@ -244,8 +244,8 @@ doc3 = ['orange','is','a','fruit']
 doc4 = ['apple','google','apple','google','apple','google','apple','google']
 doc5 = ['blue', 'is', 'a', 'color']
 docs = [doc1, doc2, doc3, doc4, doc5]
-doc1 = "apple is".split()
-docs = [doc1]
+# doc1 = "apple is".split()
+# docs = [doc1]
 # docs = [doc1, doc2]
 # docs = [reversed(doc1), reversed(doc2), reversed(doc3), reversed(doc4), reversed(doc5)]
 # docs = [['apple','is'], ['google','is'],['orange','is']]
@@ -253,7 +253,7 @@ docs = [doc1]
 # docs = [['apple', 'is', 'a'], ['google', 'is']]
 # labels = [[0.6], [0.7], [0.8]]
 labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
-labels = [[0.6]]
+# labels = [[0.6]]
 # labels = [[0.6], [0.7]]
 # docs = [['apple', 'is', 'a', 'company']]
 # labels = [[0.6]]
@@ -303,9 +303,9 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='gru')
 
 
-trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/lstm_init_weights.txt', trainedWeightFile='tmp_outputs/lstm_trained_weights.txt',
-         lr=0.3, epochs=1, rnnType='normal', cell='lstm')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/lstm_init_weights.txt', trainedWeightFile='tmp_outputs/lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', cell='lstm')
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/reverse_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='reverse', cell='lstm')
@@ -318,6 +318,6 @@ trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/sl_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/sl_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='lstm')
-# trainRnn(inputs, targets, 6, None,
-#          initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')
+trainRnn(inputs, targets, 6, None,
+         initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')
