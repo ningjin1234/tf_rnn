@@ -107,14 +107,14 @@ def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
     gradients = optimizer.compute_gradients(loss, var_list=tvars) # for debugging purpose
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.global_variables_initializer()
-    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, flattened_outputs
+    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, flattened_outputs
 
 def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=3, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
              rnnType='normal', stackedDimList=[], task='classification', cell='rnn'):
     assert len(docs) == len(labels)
     maxNumSteps = 0
     ndocs = len(docs)
-    nbatches = ndocs / miniBatchSize
+    nbatches = int(ndocs/miniBatchSize)
     if ndocs % miniBatchSize > 0:
         nbatches += 1
     lens = []
@@ -141,7 +141,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=3, initWeightF
         inputIds = np.reshape(inputIds, (batchSize, maxNumSteps, 1))
         labels = np.asarray(labels, dtype=np.float64)
         labels = np.reshape(labels, (-1, 1))
-    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, debugInfo = getRnnRegressionOps(maxNumSteps=maxNumSteps,
+    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnRegressionOps(maxNumSteps=maxNumSteps,
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray,
                                                                                                    learningRate=lr/miniBatchSize, rnnType=rnnType,
                                                                                                    stackedDimList=stackedDimList, task=task,
@@ -167,6 +167,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=3, initWeightF
                     end = miniBatchSize * (j+1)
                 else:
                     end = ndocs
+                sess.run(learningRate.assign(lr/(end-start)))
                 feed_dict = {inputTokens:inputIds[start:end], inputLens:lens[start:end], targets:labels[start:end]}
                 sess.run(learningStep, feed_dict=feed_dict)
         feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
@@ -178,10 +179,11 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=3, initWeightF
 
 doc1 = "apple is a company".split()
 doc2 = "google is another big company".split()
-doc3 = ['orange','is','a','fruit']
-doc4 = ['apple','google','apple','google','apple','google','apple','google']
-doc5 = ['blue', 'is', 'a', 'color']
-docs = [doc1, doc2, doc3, doc4, doc5]
+doc3 = "orange is a fruit".split()
+doc4 = "apple google apple google apple google apple google".split()
+doc5 = "blue is a color".split()
+doc6 = "blue orange color apple google company".split()
+docs = [doc1, doc2, doc3, doc4, doc5, doc6]
 # doc1 = "apple is".split()
 # docs = [doc1]
 # docs = [doc1, doc2]
@@ -190,7 +192,7 @@ docs = [doc1, doc2, doc3, doc4, doc5]
 # docs = [['apple'], ['google'],['orange'],['company'],['fruit']]
 # docs = [['apple', 'is', 'a'], ['google', 'is']]
 # labels = [[0.6], [0.7], [0.8]]
-labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
+labels = [[0.6], [0.7], [0.8], [0.01], [0.6], [0.2]]
 # labels = [[0.6]]
 # labels = [[0.6], [0.7]]
 # docs = [['apple', 'is', 'a', 'company']]
@@ -201,7 +203,7 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 # labels = [[0.01]]
 trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
          initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='normal', miniBatchSize=3)
+         lr=0.3, epochs=20, rnnType='normal', miniBatchSize=4)
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/reverse_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='reverse')
