@@ -1,3 +1,4 @@
+import pandas
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
 
@@ -192,6 +193,17 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
             ws = sess.run(tf.trainable_variables())
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, trainedWeightFile)
 
+def getTextDataFromFile(fname, key='key', text='text', target='target', delimiter='\t'):
+    table = pandas.read_table(fname)
+    docs = table[text].values
+    targets = table[target].values
+    tokenized = []
+    for doc in docs:
+        tokenized.append(doc.split())
+    labels = []
+    for t in targets:
+        labels.append([t])
+    return tokenized, labels
 
 doc1 = "apple is a company".split()
 doc2 = "google is another big company".split()
@@ -288,6 +300,13 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')
-trainRnn(inputs, targets, 6, None,
-         initWeightFile='tmp_outputs/slbi0_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_lstm_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='lstm')
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/slbi0_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='lstm')
+
+docs, labels = getTextDataFromFile('data/rand_docs.txt')
+print(len(docs))
+print(len(labels))
+trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+         initWeightFile='tmp_outputs/large_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/large_rnn_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
