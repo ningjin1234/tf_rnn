@@ -146,7 +146,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
         maxNumSteps = max(lens)
         embeddingArray = None
         inputIds = np.asarray(docs, dtype=np.float64)
-        inputIds = np.reshape(inputIds, (batchSize, maxNumSteps, 1))
+        inputIds = np.reshape(inputIds, (ndocs, maxNumSteps, 1))
         labels = np.asarray(labels, dtype=np.float64)
         labels = np.reshape(labels, (-1, 1))
     inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnRegressionOps(maxNumSteps=maxNumSteps,
@@ -167,16 +167,24 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, initWeightFile)
         feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
         print('loss before training: %.14g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
-        # print(sess.run(prediction, feed_dict=feed_dict))
+        # print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             for j in range(nbatches):
                 start = miniBatchSize*j
                 if j < nbatches - 1:
                     end = miniBatchSize * (j+1)
+                    if task.lower() in ['class', 'classification']:
+                        subTargets = labels[start:end]
+                    else:
+                        subTargets = labels[start*maxNumSteps:end*maxNumSteps]
                 else:
                     end = ndocs
+                    if task.lower() in ['class', 'classification']:
+                        subTargets = labels[start:end]
+                    else:
+                        subTargets = labels[start*maxNumSteps:end*maxNumSteps]
                 sess.run(learningRate.assign(lr/(end-start)))
-                feed_dict = {inputTokens:inputIds[start:end], inputLens:lens[start:end], targets:labels[start:end]}
+                feed_dict = {inputTokens:inputIds[start:end], inputLens:lens[start:end], targets:subTargets}
                 sess.run(learningStep, feed_dict=feed_dict)
         feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
         print('loss after training: %.14g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
@@ -221,18 +229,18 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6], [0.2]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
-trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/bi0_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi0_rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0])
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/bi0_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi0_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0])
 
-inputs = [[-1,2,3,4,5,6], [6,5,4,3,2,1], [5,9,3,7,1,2], [1,2,3,4,2,1]]
-targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
+inputs = [[-1,2,3,4,5,6], [6,5,4,3,2,1], [5,9,3,7,1,2], [1,2,3,4,2,1], [-2,3,4,7,5,6], [6,5,1,3,2,1]]
+targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1], [-1,1,1,1,-1,1], [-1,-1,-1,1,-1,-1]]
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7])
-
-
-
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/slbi0_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0])
 
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/gru_init_weights.txt', trainedWeightFile='tmp_outputs/gru_trained_weights.txt',
@@ -246,13 +254,18 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/bi_gru_init_weights.txt', trainedWeightFile='tmp_outputs/bi_gru_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7], cell='gru')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/bi0_gru_init_weights.txt', trainedWeightFile='tmp_outputs/bi0_gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0], cell='gru')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/sl_gru_init_weights.txt', trainedWeightFile='tmp_outputs/sl_gru_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='gru')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_gru_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_gru_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='gru')
-
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/slbi0_gru_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_gru_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='gru')
 
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/lstm_init_weights.txt', trainedWeightFile='tmp_outputs/lstm_trained_weights.txt',
@@ -266,9 +279,15 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/bi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/bi_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7], cell='lstm')
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/bi0_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/bi0_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0], cell='lstm')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/sl_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/sl_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='lstm')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')
+trainRnn(inputs, targets, 6, None,
+         initWeightFile='tmp_outputs/slbi0_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_lstm_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='lstm')
