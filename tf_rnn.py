@@ -155,7 +155,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
                                                                                                    learningRate=lr/miniBatchSize, rnnType=rnnType,
                                                                                                    stackedDimList=stackedDimList, task=task,
                                                                                                    cell=cell)
-    for d in docs:
+    for d in docs[:10]:
         print(d)
     print('learning rate: %f' % lr)
     print('rnn type: %s' % rnnType)
@@ -204,6 +204,24 @@ def getTextDataFromFile(fname, key='key', text='text', target='target', delimite
     for t in targets:
         labels.append([t])
     return tokenized, labels
+
+def getNumDataFromFile(fname, inputLen, targetLen, delimiter='\t'):
+    inputs = []
+    targets = []
+    with open(fname, 'r') as fin:
+        header = fin.readline()
+        for line in fin:
+            splitted = line.strip().split(delimiter)
+            invec = []
+            outvec = []
+            splitted = splitted[1:]
+            for v in splitted[:inputLen]:
+                invec.append(float(v))
+            for v in splitted[inputLen:inputLen+targetLen]:
+                outvec.append(float(v))
+            inputs.append(invec)
+            targets.append(outvec)
+    return inputs, targets
 
 doc1 = "apple is a company".split()
 doc2 = "google is another big company".split()
@@ -305,8 +323,11 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='lstm')
 
 docs, labels = getTextDataFromFile('data/rand_docs.txt')
-print(len(docs))
-print(len(labels))
 trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
          initWeightFile='tmp_outputs/large_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/large_rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
+         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[16, 10, 7], miniBatchSize=11)
+
+# inputs, targets = getNumDataFromFile('data/rand_num.txt', 17, 17)
+# trainRnn(inputs, targets, 23, None,
+#          initWeightFile='tmp_outputs/sllarge_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/sllarge_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[16, 10, 7], cell='lstm', miniBatchSize=11)
