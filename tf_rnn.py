@@ -1,3 +1,4 @@
+import pandas
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
 
@@ -176,6 +177,17 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=3, initWeightF
             ws = sess.run(tf.trainable_variables())
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, trainedWeightFile)
 
+def getTextDataFromFile(fname, key='key', text='text', target='target', delimiter='\t'):
+    table = pandas.read_table(fname)
+    docs = table[text].values
+    targets = table[target].values
+    tokenized = []
+    for doc in docs:
+        tokenized.append(doc.split())
+    labels = []
+    for t in targets:
+        labels.append([t])
+    return tokenized, labels
 
 doc1 = "apple is a company".split()
 doc2 = "google is another big company".split()
@@ -201,9 +213,9 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6], [0.2]]
 # labels = [[0.7]]
 # docs = [['apple','google','apple','google','apple','google','apple','google']]
 # labels = [[0.01]]
-trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt',
-         lr=0.3, epochs=20, rnnType='normal', miniBatchSize=4)
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/rnn_init_weights.txt', trainedWeightFile='tmp_outputs/rnn_trained_weights.txt',
+#          lr=0.3, epochs=20, rnnType='normal', miniBatchSize=4)
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/reverse_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/reverse_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='reverse')
@@ -261,3 +273,11 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')
+
+
+docs, labels = getTextDataFromFile('data/rand_docs.txt')
+print(len(docs))
+print(len(labels))
+trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+         initWeightFile='tmp_outputs/large_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/large_rnn_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
