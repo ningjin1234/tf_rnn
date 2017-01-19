@@ -68,7 +68,7 @@ def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
         # NOTE: currently the last layer in a stacked bidirectional RNN model must be a unidirectional recurrent layer;
         # this is because of an earlier limitation of tkdlu; if the last dim is 0, then there's no unidirectional recurrent layer
         fwOutputs = tmp_outputs[0]
-        if task.lower() in ['class', 'classification']:
+        if nNeurons <= 0 and task.lower() in ['class', 'classification']:
             bwOutputs = array_ops.reverse_sequence(input=tmp_outputs[1], seq_lengths=inputLens, seq_dim=1, batch_dim=0)
         else:
             bwOutputs = tmp_outputs[1]
@@ -157,6 +157,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
                                                                                                    cell=cell)
     for d in docs[:10]:
         print(d)
+    for l in labels[:10]:
+        print(l)
     print('learning rate: %f' % lr)
     print('rnn type: %s' % rnnType)
     print('cell type: %s' % cell)
@@ -187,8 +189,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
                 sess.run(learningRate.assign(lr/(end-start)))
                 feed_dict = {inputTokens:inputIds[start:end], inputLens:lens[start:end], targets:subTargets}
                 sess.run(learningStep, feed_dict=feed_dict)
-        feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
-        print('loss after training: %.14g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
+            feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
+            print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/ndocs))
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, trainedWeightFile)
@@ -239,6 +241,7 @@ docs = [doc1, doc2, doc3, doc4, doc5, doc6]
 # docs = [['apple', 'is', 'a'], ['google', 'is']]
 # labels = [[0.6], [0.7], [0.8]]
 labels = [[0.6], [0.7], [0.8], [0.01], [0.6], [0.2]]
+# labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 # labels = [[0.6]]
 # labels = [[0.6], [0.7]]
 # docs = [['apple', 'is', 'a', 'company']]
@@ -256,9 +259,9 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6], [0.2]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/stacked_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7])
-# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-#          initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
+trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+         initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/bi0_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi0_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0])
@@ -322,10 +325,10 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #          initWeightFile='tmp_outputs/slbi0_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='lstm')
 
-docs, labels = getTextDataFromFile('data/rand_docs.txt')
-trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/large_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/large_rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[16, 10, 7], miniBatchSize=11)
+# docs, labels = getTextDataFromFile('data/rand_docs.txt')
+# trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/large_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/large_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[16, 10, 7], miniBatchSize=-1)
 
 # inputs, targets = getNumDataFromFile('data/rand_num.txt', 17, 17)
 # trainRnn(inputs, targets, 23, None,
