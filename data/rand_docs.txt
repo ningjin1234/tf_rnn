@@ -1,0 +1,101 @@
+key	text	target
+1	a a a a is fruit fruit blue fruit color a	2
+2	orange a blue fruit color fruit fruit blue blue apple color color a	1
+3	google fruit a color blue fruit google blue orange color	5
+4	color company fruit blue is is google	3
+5	orange company orange apple color a fruit color company company fruit company	3
+6	is a a is is orange apple company blue google color color google	4
+7	apple blue is google orange	3
+8	orange blue is google color	5
+9	company google google color fruit apple fruit apple blue is orange	7
+10	color orange is company color blue blue color orange color color blue is color fruit company	1
+11	a google blue google apple google a blue fruit a	4
+12	orange fruit apple a color orange apple company google is color orange company	7
+13	orange google blue is orange blue	1
+14	company blue color a google blue blue google	4
+15	color	3
+16	company google google a color google google fruit google apple	4
+17	a google is a company orange fruit company a blue fruit blue apple a fruit a a	4
+18	blue orange fruit blue	3
+19	is a blue fruit a a apple orange fruit blue fruit a apple is orange google color is is apple	6
+20	fruit company is color color google google blue a is a a is fruit	7
+21	orange color a google google color a blue fruit a	1
+22	orange color blue google fruit orange google blue orange fruit	3
+23	fruit a company google blue fruit orange orange google fruit company	7
+24	apple is orange color company apple	3
+25	is is apple orange company company google fruit company is orange a is is a google	1
+26	is a blue color google a blue blue blue apple a is fruit blue color apple	3
+27	a is a apple orange google google blue orange fruit	2
+28	a google orange color google a color a fruit a is fruit blue orange	1
+29	color company is	4
+30	orange orange is google orange fruit google blue is a	5
+31	a orange apple fruit a a company company fruit apple orange fruit a blue	7
+32	apple orange google orange fruit color apple google a orange blue	1
+33	company orange a google is a blue company	6
+34	fruit apple apple fruit blue is orange fruit a	7
+35	is blue company	5
+36	blue google blue blue orange fruit orange company is	4
+37	apple blue orange fruit blue apple	3
+38	a blue orange blue apple	5
+39	company apple fruit a fruit fruit google	5
+40	color a google a apple apple company apple is company google is company	4
+41	a fruit apple orange orange a apple is is fruit orange color color fruit a	2
+42	blue apple apple orange apple blue fruit orange apple apple	2
+43	orange orange company is color apple	4
+44	orange apple fruit apple color company color	3
+45	apple blue company blue fruit apple is orange apple is	1
+46	google blue orange google orange is	3
+47	color is color fruit google is color is apple apple company blue is apple is a company a a	5
+48	blue orange blue is color orange apple google apple a color google is google fruit company is apple color	7
+49	apple a a google fruit color company company google is color fruit is apple	1
+50	orange is company company apple fruit is company orange a orange color orange company	7
+51	color apple apple company fruit company company fruit is	1
+52	a apple orange a company color company blue	2
+53	fruit color orange company blue a is blue a a apple fruit is apple	3
+54	a google fruit google company a apple blue apple blue a	2
+55	google fruit google a blue a orange orange google fruit orange	2
+56	blue google google color apple blue apple is blue apple apple apple google google a orange	2
+57	blue fruit a fruit blue orange color color company	3
+58	a apple is orange orange apple	1
+59	company orange google fruit company orange color is apple fruit fruit a google	6
+60	fruit color a	3
+61	google a google color a	2
+62	fruit google apple orange google company google orange blue a is blue color google is	3
+63	company company fruit color apple company a google is	6
+64	orange orange a google orange company company company	1
+65	fruit fruit is a color color a a is fruit color orange company is blue	1
+66	blue fruit is apple orange google fruit is	5
+67	blue	4
+68	company google is apple fruit orange google google company	7
+69	google	2
+70	is apple company a color google is google is blue apple orange a blue is apple	5
+71	fruit a google orange google fruit company is is orange is google is fruit is google orange apple color company	7
+72	apple a orange	1
+73	google is google a a a company google blue blue is apple	4
+74	a a company a apple fruit a is a orange color blue google apple a company a	3
+75	blue a fruit company blue apple company fruit fruit google blue google	7
+76	a fruit company color company is fruit fruit orange a company a color orange color orange blue is is	2
+77	a is fruit color orange google orange company	2
+78	color company apple google color color color google color company is	3
+79	is a google color company	1
+80	orange google apple fruit fruit company a company apple google google google blue	2
+81	is fruit orange fruit blue color blue	6
+82	apple	2
+83	a is a blue is	1
+84	company fruit google apple color is google	3
+85	a apple apple a blue fruit color a is apple	2
+86	orange color is apple orange fruit blue	6
+87	is fruit orange company color orange google google a a company color company company company apple orange google	7
+88	blue apple company is apple orange google google color google fruit color google	7
+89	orange blue color google blue fruit fruit color color blue	2
+90	is company apple	1
+91	a google blue orange blue blue google fruit blue color fruit google orange orange is	7
+92	google google company	1
+93	blue orange apple fruit blue orange fruit blue color orange blue fruit apple a a	2
+94	google apple company is google company color orange company	6
+95	orange color apple fruit color google is a apple google apple color	3
+96	apple google	4
+97	google company is blue a blue is company orange orange	7
+98	blue is a apple color blue color blue	4
+99	apple color a a blue a orange fruit company	6
+100	color is a a company apple blue google fruit color	7
