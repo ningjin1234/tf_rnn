@@ -24,7 +24,7 @@ def genDocs(words, lenMean, lenStd, ndocs):
     lens = np.random.normal(lenMean, lenStd, ndocs)
     docs = []
     for l in lens:
-        l = 1 if l<=0 else int(l)
+        l = 1 if l < 1 else int(l)
         docs.append(genOneDoc(words, l))
     return docs
 
@@ -59,7 +59,7 @@ def createNumData(fname, tokenSize, l, nobs):
 
 # example of how to create random text docs
 words = getWords('data/toy_embeddings.txt')
-createTextData('data/rand_docs.txt', words, lenMean=100, lenStd=50, ndocs=600, ntargets=7)
+createTextData('data/rand_docs.txt', words, lenMean=10, lenStd=5, ndocs=100, ntargets=7)
 
 # example of how to create random numeric sequences
 # createNumData('data/rand_num.txt', 1, 17, 600)
