@@ -270,12 +270,15 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/stacked_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7])
-# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-#          initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
+trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+         initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
+         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
 
 inputs = [[-1,2,3,4,5,6], [6,5,4,3,2,1], [5,9,3,7,1,2], [1,2,3,4,2,1]]
 targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/sl_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/sl_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='normal', task='numl')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7])
@@ -318,6 +321,6 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1]]
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/sl_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/sl_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='lstm')
-trainRnn(inputs, targets, 6, None,
-         initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')
+# trainRnn(inputs, targets, 6, None,
+#          initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')

@@ -58,8 +58,8 @@ def createNumData(fname, tokenSize, l, nobs):
             fout.write('\n')
 
 # example of how to create random text docs
-words = getWords('data/toy_embeddings.txt')
-createTextData('data/rand_docs.txt', words, lenMean=10, lenStd=5, ndocs=100, ntargets=7)
+# words = getWords('data/toy_embeddings.txt')
+# createTextData('data/rand_docs.txt', words, lenMean=10, lenStd=5, ndocs=100, ntargets=7)
 
 # example of how to create random numeric sequences
-# createNumData('data/rand_num.txt', 1, 17, 600)
+createNumData('data/rand_num.txt', 1, 53, 600)
