@@ -259,9 +259,9 @@ labels = [[0.6], [0.7], [0.8], [0.01], [0.6], [0.2]]
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/stacked_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/stacked_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='normal', stackedDimList=[6, 5, 7])
-trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
-         lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
+# trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/bi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi_rnn_trained_weights.txt',
+#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7])
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/bi0_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/bi0_rnn_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0])
@@ -328,9 +328,16 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 # docs, labels = getTextDataFromFile('data/rand_docs.txt')
 # trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/large_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/large_rnn_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[16, 10, 7], miniBatchSize=-1)
+#          lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], miniBatchSize=21)
+# trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/large_gru_init_weights.txt', trainedWeightFile='tmp_outputs/large_gru_trained_weights.txt',
+#          lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], cell='gru', miniBatchSize=21)
+# trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/large_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/large_lstm_trained_weights.txt',
+#          lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], cell='lstm', miniBatchSize=21)
 
-# inputs, targets = getNumDataFromFile('data/rand_num.txt', 17, 17)
-# trainRnn(inputs, targets, 23, None,
-#          initWeightFile='tmp_outputs/sllarge_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/sllarge_lstm_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[16, 10, 7], cell='lstm', miniBatchSize=11)
+inputs, targets = getNumDataFromFile('data/rand_num.txt', 53, 53)
+for cellType in ['rnn', 'gru', 'lstm']:
+    trainRnn(inputs, targets, 23, None,
+             initWeightFile='tmp_outputs/sllarge_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/sllarge_%s_trained_weights.txt'%cellType,
+             lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11)
