@@ -2,17 +2,23 @@ import pandas
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
 
-def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
+def getRnnperseqOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
                         bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[],
-                        task='classification', cell='rnn'):
+                        task='perseq', cell='rnn', nclass=0):
     tf.reset_default_graph()
     tf.set_random_seed(32513)
     inputTokens = tf.placeholder(tf.int32, [None, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [None])
-    if task.lower() in ['class', 'classification']:
-        targets = tf.placeholder(tf.float64, [None, 1])
-    elif task.lower() in ['numericlabeling', 'numl']:
-        targets = tf.placeholder(tf.float64, [None, maxNumSteps])
+    if task.lower() in ['perseq']:
+        if nclass <= 1:
+            targets = tf.placeholder(tf.float64, [None, 1])
+        else:
+            targets = tf.placeholder(tf.int32, [None])
+    elif task.lower() in ['numericlabeling', 'numl']:   # corresponds to same-length output type in tkdlu; all input seqs must have same length
+        if nclass <= 1:
+            targets = tf.placeholder(tf.float64, [None, maxNumSteps])
+        else:
+            targets = tf.placeholder(tf.int32, [None])
     else:
         assert(False)
     if stackedDimList is None or len(stackedDimList) == 0:
@@ -40,7 +46,7 @@ def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
         embedding = tf.Variable(initEmbeddings, name='inputEmbeddings', trainable=False, dtype=tf.float64)
         inputData = tf.nn.embedding_lookup(embedding, inputTokens)
     else:
-        inputTokens = tf.placeholder(tf.float64, [None, maxNumSteps, 1])
+        inputTokens = tf.placeholder(tf.float64, [None, maxNumSteps, tokenSize])
         inputData = inputTokens
 
     if rnnType.lower() == 'normal':
@@ -68,7 +74,7 @@ def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
         # NOTE: currently the last layer in a stacked bidirectional RNN model must be a unidirectional recurrent layer;
         # this is because of an earlier limitation of tkdlu; if the last dim is 0, then there's no unidirectional recurrent layer
         fwOutputs = tmp_outputs[0]
-        if nNeurons <= 0 and task.lower() in ['class', 'classification']:
+        if nNeurons <= 0 and task.lower() in ['perseq']:
             bwOutputs = array_ops.reverse_sequence(input=tmp_outputs[1], seq_lengths=inputLens, seq_dim=1, batch_dim=0)
         else:
             bwOutputs = tmp_outputs[1]
@@ -89,7 +95,7 @@ def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
             nNeurons = stackedDimList[-1]*2
     print('number of neurons: %d' % nNeurons)
     flattened_outputs = tf.reshape(raw_outputs, [-1, nNeurons])
-    if task.lower() in ['class', 'classification']:
+    if task.lower() in ['perseq']:
         batchSize = tf.shape(inputLens)[0]
         if rnnType.lower() in ['reversed', 'reverse']:
             index = tf.range(0, batchSize) * maxNumSteps
@@ -98,14 +104,30 @@ def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
         outputs = tf.gather(flattened_outputs, index)
     else:
         outputs = flattened_outputs
-        targets = tf.reshape(targets, [-1, 1])
-    outputW = tf.get_variable("outputW", [nNeurons, 1], dtype=tf.float64)
-    outputB = tf.get_variable("outputB", [1], dtype=tf.float64)
+        if nclass <= 1:
+            targets = tf.reshape(targets, [-1, 1])
+        else:
+            targets = tf.reshape(targets, [-1])
+    nclass = 1 if nclass <= 1 else nclass
+    outputW = tf.get_variable("outputW", [nNeurons, nclass], dtype=tf.float64)
+    outputB = tf.get_variable("outputB", [nclass], dtype=tf.float64)
     prediction = tf.add(tf.matmul(outputs, outputW), outputB)
-    if task.lower() in ['class', 'classification']:
-        loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2)
+    if task.lower() in ['perseq']:
+        if nclass <= 1:
+            loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2)
+        else:
+            logits = tf.reshape(prediction, [-1, nclass])
+            softmax = tf.nn.softmax(logits) # for debugging purpose
+            losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
+            loss = tf.reduce_sum(losses)
     elif task.lower() in ['numericlabeling', 'numl']:
-        loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2/maxNumSteps)
+        if nclass <= 1:
+            loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2/maxNumSteps)
+        else:
+            logits = tf.reshape(prediction, [-1, nclass])
+            softmax = tf.nn.softmax(logits) # for debugging purpose
+            losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
+            loss = tf.reduce_sum(losses/maxNumSteps)
     else:
         assert(False)
     lr = tf.Variable(learningRate, trainable=False)
@@ -114,10 +136,10 @@ def getRnnRegressionOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None,
     gradients = optimizer.compute_gradients(loss, var_list=tvars) # for debugging purpose
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.global_variables_initializer()
-    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, outputs
+    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, softmax
 
 def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
-             rnnType='normal', stackedDimList=[], task='classification', cell='rnn'):
+             rnnType='normal', stackedDimList=[], task='perseq', cell='rnn', tokenSize=1, nclass=0):
     assert len(docs) == len(labels)
     maxNumSteps = 0
     ndocs = len(docs)
@@ -142,23 +164,26 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
         lens = np.asarray(lens, dtype=np.int32)
         embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
     else:
-        lens = [len(doc) for doc in docs]
+        lens = [int(len(doc)/tokenSize) for doc in docs]
         lens = np.asarray(lens, dtype=np.int32)
         maxNumSteps = max(lens)
         embeddingArray = None
         inputIds = np.asarray(docs, dtype=np.float64)
-        inputIds = np.reshape(inputIds, (ndocs, maxNumSteps, 1))
+        inputIds = np.reshape(inputIds, (ndocs, maxNumSteps, tokenSize))
         labels = np.asarray(labels, dtype=np.float64)
         labels = np.reshape(labels, (-1, 1))
-    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnRegressionOps(maxNumSteps=maxNumSteps,
+        if nclass>1:
+            labels = np.asarray(labels, dtype=np.int32)
+            labels = np.reshape(labels, (-1))
+    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnperseqOps(maxNumSteps=maxNumSteps,
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray,
                                                                                                    learningRate=lr/miniBatchSize, rnnType=rnnType,
                                                                                                    stackedDimList=stackedDimList, task=task,
-                                                                                                   cell=cell)
-    for d in docs[:10]:
-        print(d)
-    for l in labels[:10]:
-        print(l)
+                                                                                                   cell=cell, tokenSize=tokenSize, nclass=nclass)
+    # for d in docs[:10]:
+    #     print(d)
+    # for l in labels[:10]:
+    #     print(l)
     print('learning rate: %f' % lr)
     print('rnn type: %s' % rnnType)
     print('cell type: %s' % cell)
@@ -176,13 +201,13 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
                 start = miniBatchSize*j
                 if j < nbatches - 1:
                     end = miniBatchSize * (j+1)
-                    if task.lower() in ['class', 'classification']:
+                    if task.lower() in ['perseq']:
                         subTargets = labels[start:end]
                     else:
                         subTargets = labels[start*maxNumSteps:end*maxNumSteps]
                 else:
                     end = ndocs
-                    if task.lower() in ['class', 'classification']:
+                    if task.lower() in ['perseq']:
                         subTargets = labels[start:end]
                     else:
                         subTargets = labels[start*maxNumSteps:end*maxNumSteps]
@@ -217,6 +242,7 @@ def getNumDataFromFile(fname, inputLen, targetLen, delimiter='\t'):
             invec = []
             outvec = []
             splitted = splitted[1:]
+            assert (len(splitted) >= inputLen+targetLen)
             for v in splitted[:inputLen]:
                 invec.append(float(v))
             for v in splitted[inputLen:inputLen+targetLen]:
@@ -224,6 +250,11 @@ def getNumDataFromFile(fname, inputLen, targetLen, delimiter='\t'):
             inputs.append(invec)
             targets.append(outvec)
     return inputs, targets
+# this is needed to make TF and TKDLU use the same levelization
+def mapTargets(targets, targetMap):
+    for arr in targets:
+        for i in range(len(arr)):
+            arr[i] = targetMap[arr[i]]
 
 doc1 = "apple is a company".split()
 doc2 = "google is another big company".split()
@@ -336,8 +367,44 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #          initWeightFile='tmp_outputs/large_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/large_lstm_trained_weights.txt',
 #          lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], cell='lstm', miniBatchSize=21)
 
-inputs, targets = getNumDataFromFile('data/rand_num.txt', 53, 53)
+# inputs, targets = getNumDataFromFile('data/rand_num.txt', 53, 53)
+# for cellType in ['rnn', 'gru', 'lstm']:
+#     trainRnn(inputs, targets, 23, None,
+#              initWeightFile='tmp_outputs/sllarge_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/sllarge_%s_trained_weights.txt'%cellType,
+#              lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11)
+
+# inputs, targets = getNumDataFromFile('data/rand_num_t7_l23.txt', 23*5, 23)
+# print(len(inputs))
+# print(len(inputs[0]))
+# for cellType in ['rnn', 'gru', 'lstm']:
+#     trainRnn(inputs, targets, 23, None,
+#              initWeightFile='tmp_outputs/sllarge_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/sllarge_t5_%s_trained_weights.txt'%cellType,
+#              lr=0.3, epochs=5, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5)
+
+# inputs, targets = getNumDataFromFile('data/rand_num_t7_l23.txt', 23*5, 1)
+# print(len(inputs))
+# print(len(inputs[0]))
+# for cellType in ['rnn', 'gru', 'lstm']:
+#     trainRnn(inputs, targets, 23, None,
+#              initWeightFile='tmp_outputs/large_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/large_t5_%s_trained_weights.txt'%cellType,
+#              lr=0.3, epochs=5, rnnType='bi', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5)
+
+# inputs, targets = getNumDataFromFile('data/rand_num_t7_l23_binary.txt', 23*5, 1)
+# print(len(inputs))
+# print(len(inputs[0]))
+# targetMap = {0:1, 1:0}
+# mapTargets(targets, targetMap)
+# for cellType in ['rnn', 'gru', 'lstm']:
+#     trainRnn(inputs, targets, 23, None,
+#              initWeightFile='tmp_outputs/binary_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/binary_t5_%s_trained_weights.txt'%cellType,
+#              lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)
+
+inputs, targets = getNumDataFromFile('data/rand_num_t7_l23_binary.txt', 23*5, 23)
+print(len(inputs))
+print(len(inputs[0]))
+targetMap = {0:1, 1:0}
+mapTargets(targets, targetMap)
 for cellType in ['rnn', 'gru', 'lstm']:
     trainRnn(inputs, targets, 23, None,
-             initWeightFile='tmp_outputs/sllarge_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/sllarge_%s_trained_weights.txt'%cellType,
-             lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11)
+             initWeightFile='tmp_outputs/slbinary_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/slbinary_t5_%s_trained_weights.txt'%cellType,
+             lr=0.3, epochs=5, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)

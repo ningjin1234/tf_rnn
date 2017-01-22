@@ -35,12 +35,15 @@ def createTextData(fname, words, lenMean=10, lenStd=1, ndocs=10, ntargets=5):
         for i in range(len(docs)):
             fout.write('%d\t%s\t%d\n' % (i+1, docs[i], random.randint(1, ntargets)))
 
-def createNumData(fname, tokenSize, l, nobs):
+def createNumData(fname, tokenSize, l, nobs, nclass=0):
     seqs = []
     targets = []
     for i in range(nobs):
         seqs.append(np.random.rand(tokenSize*l))
-        targets.append(np.random.rand(l))
+        if nclass <= 1:
+            targets.append(np.random.rand(l))
+        else:
+            targets.append(np.random.randint(nclass, size=l))
     cols = []
     for i in range(l*tokenSize):
         cols.append('x'+str(i+1))
@@ -62,4 +65,6 @@ def createNumData(fname, tokenSize, l, nobs):
 # createTextData('data/rand_docs.txt', words, lenMean=10, lenStd=5, ndocs=100, ntargets=7)
 
 # example of how to create random numeric sequences
-createNumData('data/rand_num.txt', 1, 53, 600)
+# createNumData('data/rand_num_t7_l23.txt', 5, 23, 600)
+
+createNumData('data/rand_num_t7_l23_binary.txt', 5, 23, 600, nclass=2)
