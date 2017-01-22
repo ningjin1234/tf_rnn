@@ -14,7 +14,7 @@ def getRnnperseqOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1
             targets = tf.placeholder(tf.float64, [None, 1])
         else:
             targets = tf.placeholder(tf.int32, [None])
-    elif task.lower() in ['numericlabeling', 'numl']:   # corresponds to same-length output type in tkdlu; all input seqs must have same length
+    elif task.lower() in ['pertoken', 'perstep']:   # corresponds to same-length output type in tkdlu; all input seqs must have same length
         if nclass <= 1:
             targets = tf.placeholder(tf.float64, [None, maxNumSteps])
         else:
@@ -120,7 +120,7 @@ def getRnnperseqOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1
             softmax = tf.nn.softmax(logits) # for debugging purpose
             losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
             loss = tf.reduce_sum(losses)
-    elif task.lower() in ['numericlabeling', 'numl']:
+    elif task.lower() in ['pertoken', 'perstep']:
         if nclass <= 1:
             loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2/maxNumSteps)
         else:
@@ -250,7 +250,9 @@ def getNumDataFromFile(fname, inputLen, targetLen, delimiter='\t'):
             inputs.append(invec)
             targets.append(outvec)
     return inputs, targets
+
 # this is needed to make TF and TKDLU use the same levelization
+# there's no easy way to get the mapping, so currently I'm only testing binary targets for classification
 def mapTargets(targets, targetMap):
     for arr in targets:
         for i in range(len(arr)):
@@ -301,10 +303,10 @@ inputs = [[-1,2,3,4,5,6], [6,5,4,3,2,1], [5,9,3,7,1,2], [1,2,3,4,2,1], [-2,3,4,7
 targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1], [-1,1,1,1,-1,1], [-1,-1,-1,1,-1,-1]]
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_rnn_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7])
+#          lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7])
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi0_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_rnn_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0])
+#          lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 0])
 
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/gru_init_weights.txt', trainedWeightFile='tmp_outputs/gru_trained_weights.txt',
@@ -323,13 +325,13 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0], cell='gru')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/sl_gru_init_weights.txt', trainedWeightFile='tmp_outputs/sl_gru_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='gru')
+#          lr=0.3, epochs=10, rnnType='normal', task='perstep', cell='gru')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_gru_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_gru_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='gru')
+#          lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell='gru')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi0_gru_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_gru_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='gru')
+#          lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 0], cell='gru')
 
 # trainRnn(docs, labels, 4, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/lstm_init_weights.txt', trainedWeightFile='tmp_outputs/lstm_trained_weights.txt',
@@ -348,13 +350,13 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #          lr=0.3, epochs=10, rnnType='bi', stackedDimList=[6, 5, 0], cell='lstm')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/sl_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/sl_lstm_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='normal', task='numl', cell='lstm')
+#          lr=0.3, epochs=10, rnnType='normal', task='perstep', cell='lstm')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi_lstm_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell='lstm')
+#          lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell='lstm')
 # trainRnn(inputs, targets, 6, None,
 #          initWeightFile='tmp_outputs/slbi0_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_lstm_trained_weights.txt',
-#          lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 0], cell='lstm')
+#          lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 0], cell='lstm')
 
 # docs, labels = getTextDataFromFile('data/rand_docs.txt')
 # trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
@@ -371,7 +373,7 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 # for cellType in ['rnn', 'gru', 'lstm']:
 #     trainRnn(inputs, targets, 23, None,
 #              initWeightFile='tmp_outputs/sllarge_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/sllarge_%s_trained_weights.txt'%cellType,
-#              lr=0.3, epochs=10, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11)
+#              lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11)
 
 # inputs, targets = getNumDataFromFile('data/rand_num_t7_l23.txt', 23*5, 23)
 # print(len(inputs))
@@ -379,7 +381,7 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 # for cellType in ['rnn', 'gru', 'lstm']:
 #     trainRnn(inputs, targets, 23, None,
 #              initWeightFile='tmp_outputs/sllarge_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/sllarge_t5_%s_trained_weights.txt'%cellType,
-#              lr=0.3, epochs=5, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5)
+#              lr=0.3, epochs=5, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5)
 
 # inputs, targets = getNumDataFromFile('data/rand_num_t7_l23.txt', 23*5, 1)
 # print(len(inputs))
@@ -407,4 +409,4 @@ mapTargets(targets, targetMap)
 for cellType in ['rnn', 'gru', 'lstm']:
     trainRnn(inputs, targets, 23, None,
              initWeightFile='tmp_outputs/slbinary_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/slbinary_t5_%s_trained_weights.txt'%cellType,
-             lr=0.3, epochs=5, rnnType='bi', task='numl', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)
+             lr=0.3, epochs=5, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)
