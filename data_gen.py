@@ -2,6 +2,9 @@ import numpy as np
 import unittest
 import random
 
+'''
+extracts the list of words from fname, assuming only the first column contains words
+'''
 def getWords(fname, delimiter='\t', hasHeader=True):
     words = []
     with open(fname, 'r') as fin:
@@ -14,12 +17,15 @@ def getWords(fname, delimiter='\t', hasHeader=True):
                 words.append(w)
     return words
 
-# words are randomly selected from given list and then are concatenated by a white splace
-def genOneDoc(words, length):
+'''
+generates a string with given length and the string is the concatenation of list of given words (delimited by delimiter);
+words are randomly selected from given list and then are concatenated by a white splace
+'''
+def genOneDoc(words, length, delimiter=' '):
     selected = []
     for i in range(length):
         selected.append(words[random.randint(0, len(words)-1)])
-    return ' '.join(selected)
+    return delimiter.join(selected)
 
 def genDocs(words, lenMean, lenStd, ndocs):
     lens = np.random.normal(lenMean, lenStd, ndocs)
