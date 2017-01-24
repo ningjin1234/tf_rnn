@@ -14,6 +14,7 @@ def getWords(fname, delimiter='\t', hasHeader=True):
                 words.append(w)
     return words
 
+# words are randomly selected from given list and then are concatenated by a white splace
 def genOneDoc(words, length):
     selected = []
     for i in range(length):
