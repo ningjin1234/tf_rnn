@@ -95,7 +95,7 @@ def writeWeightsWithNames(matrices, variables, stackedDimList, fname):
             layerId = winfo[0]
             matrices = winfo[1]
             biases = winfo[2]
-            print(layerId, winfo[3])
+            # print(layerId, winfo[3])
             if not layerId in nextWidInlayer:
                 nextWidInlayer[layerId] = 0
             matrices = matrices + biases
