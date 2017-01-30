@@ -2,6 +2,21 @@ import pandas
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
 
+def getRnnCell(nNeurons, cell='rnn', nCells=1, act=tf.tanh):
+    ret = []
+    rnnCell = None
+    for i in range(nCells):
+        if cell == 'rnn':
+            rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=act)
+        elif cell == 'gru':
+            rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=act)
+        elif cell == 'lstm':
+            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=act, use_peepholes=True, forget_bias=0.0) 
+        ret.append(rnnCell)
+    if nCells == 1:
+        return ret[0]
+    return ret
+
 def getRnnperseqOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
                         bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[],
                         task='perseq', cell='rnn', nclass=0):
@@ -55,22 +70,35 @@ def getRnnperseqOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1
         inputDataReversed = array_ops.reverse_sequence(input=inputData, seq_lengths=inputLens, seq_dim=1, batch_dim=0)
         raw_outputs_r, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=inputDataReversed)
         raw_outputs = array_ops.reverse_sequence(input=raw_outputs_r, seq_lengths=inputLens, seq_dim=1, batch_dim=0)
-    elif rnnType.lower() == 'bi' or rnnType.lower() == 'bidirectional':
+    elif rnnType.lower() in ['bi', 'stackedbi', 'bistacked', 'bidirectional']:
         stackedDimList = stackedDimList[:-1]
-        if cell == 'rnn':
-            fwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
-            bwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
-        elif cell == 'gru':
-            fwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
-            bwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
-        elif cell == 'lstm':
-            fwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
-            bwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
-        fwRnnCell = tf.nn.rnn_cell.MultiRNNCell(fwRnnCellList)
-        bwRnnCell = tf.nn.rnn_cell.MultiRNNCell(bwRnnCellList)
-        # NOTE: in bidirectional_dynamic_rnn, tensorflow does not concatenate outputs for each layer, it only concatenates the outputs for the last layer
-        tmp_outputs, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell,
-                                                                   dtype=tf.float64, sequence_length=inputLens, inputs=inputData)
+        if rnnType.lower() in ['stackedbi', 'bistacked']:
+            tmpInputs = inputData
+            for i in range(len(stackedDimList)):
+                n = stackedDimList[i]
+                with tf.variable_scope('layer%d'%i):
+                    cells = getRnnCell(n, cell=cell, nCells=2)
+                    fwRnnCell = cells[0]
+                    bwRnnCell = cells[1]
+                    tmpSeq, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell, dtype=tf.float64, 
+                                                                            sequence_length=inputLens, inputs=tmpInputs)
+                    tmpInputs = tf.concat(2, [tmpSeq[0], tmpSeq[1]])
+                tmp_outputs = tmpSeq
+        else:
+            if cell == 'rnn':
+                fwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
+                bwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
+            elif cell == 'gru':
+                fwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
+                bwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
+            elif cell == 'lstm':
+                fwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
+                bwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
+            fwRnnCell = tf.nn.rnn_cell.MultiRNNCell(fwRnnCellList)
+            bwRnnCell = tf.nn.rnn_cell.MultiRNNCell(bwRnnCellList)
+            # NOTE: in bidirectional_dynamic_rnn, tensorflow does not concatenate outputs for each layer, it only concatenates the outputs for the last layer
+            tmp_outputs, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell,
+                                                                       dtype=tf.float64, sequence_length=inputLens, inputs=inputData)
         # NOTE: currently the last layer in a stacked bidirectional RNN model must be a unidirectional recurrent layer;
         # this is because of an earlier limitation of tkdlu; if the last dim is 0, then there's no unidirectional recurrent layer
         fwOutputs = tmp_outputs[0]
@@ -362,16 +390,16 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #          initWeightFile='tmp_outputs/slbi0_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/slbi0_lstm_trained_weights.txt',
 #          lr=0.3, epochs=10, rnnType='bi', task='perstep', stackedDimList=[6, 5, 0], cell='lstm')
 
-docs, labels = getTextDataFromFile('data/rand_docs.txt')
+# docs, labels = getTextDataFromFile('data/rand_docs.txt')
 # trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
 #          initWeightFile='tmp_outputs/large_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/large_rnn_trained_weights.txt',
 #          lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], miniBatchSize=99)
-trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/large_gru_init_weights.txt', trainedWeightFile='tmp_outputs/large_gru_trained_weights.txt',
-         lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], cell='gru', miniBatchSize=99)
-trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
-         initWeightFile='tmp_outputs/large_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/large_lstm_trained_weights.txt',
-         lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], cell='lstm', miniBatchSize=99)
+# trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/large_gru_init_weights.txt', trainedWeightFile='tmp_outputs/large_gru_trained_weights.txt',
+#          lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], cell='gru', miniBatchSize=99)
+# trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+#          initWeightFile='tmp_outputs/large_lstm_init_weights.txt', trainedWeightFile='tmp_outputs/large_lstm_trained_weights.txt',
+#          lr=0.3, epochs=1, rnnType='bi', stackedDimList=[16, 10, 7], cell='lstm', miniBatchSize=99)
 
 # inputs, targets = getNumDataFromFile('data/rand_num.txt', 53, 53)
 # for cellType in ['rnn', 'gru', 'lstm']:
@@ -414,3 +442,10 @@ trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
 #     trainRnn(inputs, targets, 23, None,
 #              initWeightFile='tmp_outputs/slbinary_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/slbinary_t5_%s_trained_weights.txt'%cellType,
 #              lr=0.3, epochs=5, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)
+
+docs, labels = getTextDataFromFile('data/rand_docs.txt')
+for cellType in ['rnn', 'gru', 'lstm']:
+    trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+             initWeightFile='tmp_outputs/stackedbi_%s_init_weights.txt'%cellType, 
+             trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
+             lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], miniBatchSize=1000)
