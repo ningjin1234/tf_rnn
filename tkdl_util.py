@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
 import unittest
-# first column is term string
+'''
+first column of the file must be the term column; the rest of the columns are treated as embedding content
+'''
 def readEmbeddingFile(fname, hasHeader=True, delimiter='\t'):
     ndim = 0
     embeddings = []
