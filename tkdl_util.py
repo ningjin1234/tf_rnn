@@ -58,7 +58,7 @@ def getLayerName(fullName):
         if ct in fullName:
             return fullName[:fullName.find(ct)]
     return ''
-
+# whether it's a weight matrix or bias
 def isMatrix(fullName):
     if 'Matrix' in fullName or 'outputW' in fullName:
         return True
