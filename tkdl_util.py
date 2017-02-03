@@ -58,7 +58,7 @@ def getLayerName(fullName):
         if ct in fullName:
             return fullName[:fullName.find(ct)]
     return ''
-
+# returns whether it's a weight matrix or not
 def isMatrix(fullName):
     if 'Matrix' in fullName or 'outputW' in fullName:
         return True
@@ -149,5 +149,3 @@ class TestTkdlUtil(unittest.TestCase):
         self.assertEqual(embeddingArray[token2Id['fruit']].tolist(), [8.,0.25,0.125])
         print('testLoadEmbedding passed')
 
-# if __name__ == "__main__":
-#     unittest.main()
