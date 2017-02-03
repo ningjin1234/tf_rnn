@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
 import unittest
-
+'''
+the first column of the file must be the term column and all the rest of the columns are treated as embedding content
+'''
 def readEmbeddingFile(fname, hasHeader=True, delimiter='\t'):
     ndim = 0
     embeddings = []
@@ -129,6 +131,7 @@ def writeWeights(matrices, layerIdList, fname, breakdownDict={}):
 
 def writeWeightsAux(fout, layerId, wid, matrix):
     reshaped = np.reshape(matrix, (-1))
+    # print(len(reshaped))
     for v in reshaped:
         fout.write('%d\t%d\t%s\n' % (layerId, wid, str(v)))
         wid += 1
