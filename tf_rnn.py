@@ -1,3 +1,4 @@
+# legacy code to check gradient calculation of C implementation; DO NOT add new features to this
 import pandas
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
@@ -17,7 +18,7 @@ def getRnnCell(nNeurons, cell='rnn', nCells=1, act=tf.tanh):
         return ret[0]
     return ret
 
-def getRnnperseqOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
+def getRnnTrainOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
                         bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[],
                         task='perseq', cell='rnn', nclass=0):
     tf.reset_default_graph()
@@ -204,7 +205,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile, miniBatchSize=-1, initWeight
         if nclass>1:
             labels = np.asarray(labels, dtype=np.int32)
             labels = np.reshape(labels, (-1))
-    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnperseqOps(maxNumSteps=maxNumSteps,
+    inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnTrainOps(maxNumSteps=maxNumSteps,
                                                                                                    nNeurons=nNeurons, initEmbeddings=embeddingArray,
                                                                                                    learningRate=lr/miniBatchSize, rnnType=rnnType,
                                                                                                    stackedDimList=stackedDimList, task=task,
