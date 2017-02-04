@@ -448,4 +448,4 @@ for cellType in ['rnn', 'gru', 'lstm']:
     trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
              initWeightFile='tmp_outputs/stackedbi_%s_init_weights.txt'%cellType, 
              trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
-             lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], miniBatchSize=1000)
+             lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
