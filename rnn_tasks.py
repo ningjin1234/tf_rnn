@@ -1,6 +1,4 @@
-# legacy code to check gradient calculation of C implementation; DO NOT add new features to this
 import pandas
-import time
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
 
@@ -13,17 +11,66 @@ def getRnnCell(nNeurons, cell='rnn', nCells=1, act=tf.tanh):
         elif cell == 'gru':
             rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=act)
         elif cell == 'lstm':
-            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=act, use_peepholes=True, forget_bias=0.0) 
+            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=act, use_peepholes=True, forget_bias=1.0) 
         ret.append(rnnCell)
     if nCells == 1:
         return ret[0]
     return ret
 
-def getRnnTrainOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
+def scaleToList(v, l):
+    if isinstance(v, list):
+        if len(v) == l:
+            return v
+        elif len(v) > l:
+            return v[:l]
+        else:
+            ret = []
+            for i in range(l):
+                if i < len(v):
+                    ret.append(v[i])
+                else:
+                    ret.append(v[-1])
+            return ret
+    return [v for i in range(l)]
+
+def getRnnLayers(stackedDimList, inputData, inputLens, cellTypes='rnn', acts=tf.tanh, rnnTypes='uni'):
+    tmpInputs = inputData
+    cellTypes = scaleToList(cellTypes, len(stackedDimList))
+    acts = scaleToList(acts, len(stackedDimList))
+    rnnTypes = scaleToList(rnnTypes, len(stackedDimList)) 
+    for i in range(len(stackedDimList)):
+        n = stackedDimList[i]
+        cellType = cellTypes[i]
+        act = acts[i]
+        rnnType = rnnTypes[i]
+        with tf.variable_scope('layer%d'%i):
+            if rnnType == 'bi':
+                cells = getRnnCell(n, cell=cellType, nCells=2, act=act)
+                fwRnnCell = cells[0]
+                bwRnnCell = cells[1]
+                tmpSeq, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell, dtype=tf.float64, 
+                                                                     sequence_length=inputLens, inputs=tmpInputs)
+                tmpInputs = tf.concat(2, [tmpSeq[0], tmpSeq[1]])
+            elif rnnType == 'uni':
+                cell = getRnnCell(n, cell=cellType, nCells=1, act=act)
+                tmpSeq, tmp_states = tf.nn.dynamic_rnn(cell=cell, dtype=tf.float64, sequence_length=inputLens, inputs=tmpInputs)
+                tmpInputs = tmpSeq
+            elif rnnType == 'rev':
+                cell = getRnnCell(n, cell=cellType, nCells=1, act=act)
+                inputDataReversed = array_ops.reverse_sequence(input=tmpInputs, seq_lengths=inputLens, seq_dim=1, batch_dim=0)
+                raw_outputs_r, last_states = tf.nn.dynamic_rnn(cell=cell, dtype=tf.float64, sequence_length=inputLens, inputs=inputDataReversed)
+                tmpSeq = array_ops.reverse_sequence(input=raw_outputs_r, seq_lengths=inputLens, seq_dim=1, batch_dim=0)
+                tmpInputs = tmpSeq
+            else:
+                raise ValueError("unsupported rnn type: %s" % rnnType)
+    return tmpInputs, last_states       
+
+def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
                         bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[],
-                        task='perseq', cell='rnn', nclass=0):
+                        task='perseq', cell='rnn', nclass=0, seed=None):
     tf.reset_default_graph()
-    tf.set_random_seed(32513)
+    if seed is not None:
+        tf.set_random_seed(seed)
     inputTokens = tf.placeholder(tf.int32, [None, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [None])
     if task.lower() in ['perseq']:
@@ -37,27 +84,7 @@ def getRnnTrainOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
         else:
             targets = tf.placeholder(tf.int32, [None])
     else:
-        assert(False)
-    if stackedDimList is None or len(stackedDimList) == 0:
-        if cell == 'rnn':
-            rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
-        elif cell == 'gru':
-            rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=tf.tanh)
-        elif cell == 'lstm':
-            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) # default forget bias is 1.0
-    else:
-        if cell == 'rnn':
-            rnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
-        elif cell == 'gru':
-            rnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
-        elif cell == 'lstm':
-            rnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
-        rnnCell = tf.nn.rnn_cell.MultiRNNCell(rnnCellList)
-        nNeurons = stackedDimList[-1]
-    # keep this code for future reference: training initial states
-    # initState = tf.get_variable("initState", [nNeurons], dtype=tf.float64, trainable=True)
-    # initStates = tf.concat(0, [initState for i in range(batchSize)])
-    # initStates = tf.reshape(initStates, [-1, nNeurons])
+        raise ValueError("unsupported task type: %s" % task)        
 
     if initEmbeddings is not None:
         embedding = tf.Variable(initEmbeddings, name='inputEmbeddings', trainable=False, dtype=tf.float64)
@@ -66,68 +93,16 @@ def getRnnTrainOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
         inputTokens = tf.placeholder(tf.float64, [None, maxNumSteps, tokenSize])
         inputData = inputTokens
 
-    if rnnType.lower() == 'normal':
-        raw_outputs, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=inputData)
-    elif rnnType.lower() == 'reversed' or rnnType.lower() == 'reverse':
-        inputDataReversed = array_ops.reverse_sequence(input=inputData, seq_lengths=inputLens, seq_dim=1, batch_dim=0)
-        raw_outputs_r, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=inputDataReversed)
-        raw_outputs = array_ops.reverse_sequence(input=raw_outputs_r, seq_lengths=inputLens, seq_dim=1, batch_dim=0)
-    elif rnnType.lower() in ['bi', 'stackedbi', 'bistacked', 'bidirectional']:
-        stackedDimList = stackedDimList[:-1]
-        if rnnType.lower() in ['stackedbi', 'bistacked']:
-            tmpInputs = inputData
-            for i in range(len(stackedDimList)):
-                n = stackedDimList[i]
-                with tf.variable_scope('layer%d'%i):
-                    cells = getRnnCell(n, cell=cell, nCells=2)
-                    fwRnnCell = cells[0]
-                    bwRnnCell = cells[1]
-                    tmpSeq, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell, dtype=tf.float64, 
-                                                                            sequence_length=inputLens, inputs=tmpInputs)
-                    tmpInputs = tf.concat(2, [tmpSeq[0], tmpSeq[1]])
-                tmp_outputs = tmpSeq
-        else:
-            if cell == 'rnn':
-                fwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
-                bwRnnCellList = [tf.nn.rnn_cell.BasicRNNCell(dim, activation=tf.tanh) for dim in stackedDimList]
-            elif cell == 'gru':
-                fwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
-                bwRnnCellList = [tf.nn.rnn_cell.GRUCell(dim, activation=tf.tanh) for dim in stackedDimList]
-            elif cell == 'lstm':
-                fwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
-                bwRnnCellList = [tf.nn.rnn_cell.LSTMCell(dim, activation=tf.tanh, use_peepholes=True, forget_bias=0.0) for dim in stackedDimList]
-            fwRnnCell = tf.nn.rnn_cell.MultiRNNCell(fwRnnCellList)
-            bwRnnCell = tf.nn.rnn_cell.MultiRNNCell(bwRnnCellList)
-            # NOTE: in bidirectional_dynamic_rnn, tensorflow does not concatenate outputs for each layer, it only concatenates the outputs for the last layer
-            tmp_outputs, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell,
-                                                                       dtype=tf.float64, sequence_length=inputLens, inputs=inputData)
-        # NOTE: currently the last layer in a stacked bidirectional RNN model must be a unidirectional recurrent layer;
-        # this is because of an earlier limitation of tkdlu; if the last dim is 0, then there's no unidirectional recurrent layer
-        fwOutputs = tmp_outputs[0]
-        if nNeurons <= 0 and task.lower() in ['perseq']:
-            bwOutputs = array_ops.reverse_sequence(input=tmp_outputs[1], seq_lengths=inputLens, seq_dim=1, batch_dim=0)
-        else:
-            bwOutputs = tmp_outputs[1]
-        tmp_outputs = tf.concat(2, [fwOutputs, bwOutputs])
-        # print(tmp_outputs.get_shape())
-        # print('number of neurons: %d' % nNeurons)
-        if nNeurons > 0:
-            if cell == 'rnn':
-                rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=tf.tanh)
-            elif cell == 'gru':
-                rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=tf.tanh)
-            elif cell == 'lstm':
-                rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=tf.tanh, use_peepholes=True, forget_bias=0.0)
-            raw_outputs, last_states = tf.nn.dynamic_rnn(cell=rnnCell, dtype=tf.float64, sequence_length=inputLens, inputs=tmp_outputs)
-        else:
-            raw_outputs = tmp_outputs
-            last_states = tmp_states
-            nNeurons = stackedDimList[-1]*2
+    cellTypes = scaleToList(cell, len(stackedDimList))
+    acts = scaleToList(act, len(stackedDimList))
+    rnnTypes = scaleToList(rnnType, len(stackedDimList)) 
+    raw_outputs, last_states = getRnnLayers(stackedDimList, inputData, inputLens, cellTypes=cellTypes, rnnTypes=rnnTypes, acts=acts)
+    nNeurons = stackedDimList[-1] if rnnTypes[-1] != 'bi' else 2*stackedDimList[-1]
     # print('number of neurons: %d' % nNeurons)
     flattened_outputs = tf.reshape(raw_outputs, [-1, nNeurons])
     if task.lower() in ['perseq']:
         batchSize = tf.shape(inputLens)[0]
-        if rnnType.lower() in ['reversed', 'reverse']:
+        if rnnTypes[-1].lower() == 'rev':
             index = tf.range(0, batchSize) * maxNumSteps
         else:
             index = tf.range(0, batchSize) * maxNumSteps + inputLens - 1
@@ -158,8 +133,6 @@ def getRnnTrainOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
             softmax = tf.nn.softmax(logits) # for debugging purpose
             losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
             loss = tf.reduce_sum(losses/maxNumSteps)
-    else:
-        assert(False)
     lr = tf.Variable(learningRate, trainable=False)
     tvars = tf.trainable_variables()
     optimizer = tf.train.GradientDescentOptimizer(lr)
@@ -169,36 +142,8 @@ def getRnnTrainOps(maxNumSteps=10, nNeurons=4, initEmbeddings=None, tokenSize=1,
     # last return is output to screen for debugging purpose
     return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, flattened_outputs
 
-def genTextParms(docs, embeddingFile):
-    textParms = {}
-    print('loading embedding file %s' % embeddingFile)
-    token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
-    maxNumSteps = 0
-    lens = []
-    for doc in docs:
-        idList = tokens2ids(doc, token2Id)
-        lens.append(len(idList))
-        if len(idList) > maxNumSteps:
-            maxNumSteps = len(idList)
-    inputIds = []
-    for doc in docs:
-        ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
-        inputIds.append(ids)
-    inputIds = np.asarray(inputIds, dtype=np.int32)
-    lens = np.asarray(lens, dtype=np.int32)
-    embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
-    textParms['ids'] = inputIds
-    textParms['lens'] = lens
-    textParms['emb'] = embeddingArray
-    textParms['maxl'] = maxNumSteps
-    return textParms
-
-def parseTextParms(inputTextParms):
-    return inputTextParms['ids'], inputTextParms['lens'], inputTextParms['emb'], inputTextParms['maxl']
-
-def trainRnn(docs, labels, nNeurons, embeddingFile=None, miniBatchSize=-1, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
-             rnnType='normal', stackedDimList=[], task='perseq', cell='rnn', tokenSize=1, nclass=0,
-             inputTextParms=None):
+def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
+             rnnType='normal', stackedDimList=[], task='perseq', cell='rnn', tokenSize=1, nclass=0, seed=None):
     assert len(docs) == len(labels)
     maxNumSteps = 0
     ndocs = len(docs)
@@ -208,11 +153,20 @@ def trainRnn(docs, labels, nNeurons, embeddingFile=None, miniBatchSize=-1, initW
     if ndocs % miniBatchSize > 0:
         nbatches += 1
     lens = []
-    if inputTextParms is not None:
-        inputIds, lens, embeddingArray, maxNumSteps = parseTextParms(inputTextParms)
-    elif embeddingFile is not None:
-        inputTextParms = genTextParms(docs, embeddingFile) 
-        inputIds, lens, embeddingArray, maxNumSteps = parseTextParms(inputTextParms)
+    if embeddingFile is not None:
+        token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
+        for doc in docs:
+            idList = tokens2ids(doc, token2Id)
+            lens.append(len(idList))
+            if len(idList) > maxNumSteps:
+                maxNumSteps = len(idList)
+        inputIds = []
+        for doc in docs:
+            ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
+            inputIds.append(ids)
+        inputIds = np.asarray(inputIds, dtype=np.int32)
+        lens = np.asarray(lens, dtype=np.int32)
+        embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
     else:
         lens = [int(len(doc)/tokenSize) for doc in docs]
         lens = np.asarray(lens, dtype=np.int32)
@@ -226,7 +180,7 @@ def trainRnn(docs, labels, nNeurons, embeddingFile=None, miniBatchSize=-1, initW
             labels = np.asarray(labels, dtype=np.int32)
             labels = np.reshape(labels, (-1))
     inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnTrainOps(maxNumSteps=maxNumSteps,
-                                                                                                   nNeurons=nNeurons, initEmbeddings=embeddingArray,
+                                                                                                   seed=seed, initEmbeddings=embeddingArray,
                                                                                                    learningRate=lr/miniBatchSize, rnnType=rnnType,
                                                                                                    stackedDimList=stackedDimList, task=task,
                                                                                                    cell=cell, tokenSize=tokenSize, nclass=nclass)
@@ -239,7 +193,6 @@ def trainRnn(docs, labels, nNeurons, embeddingFile=None, miniBatchSize=-1, initW
     print('cell type: %s' % cell)
     print('task type: %s' % task)
     print('mini-batch size: %d' % miniBatchSize)
-    start = time.time()
     with tf.Session() as sess:
         sess.run(initAll)
         if initWeightFile is not None:
@@ -272,11 +225,8 @@ def trainRnn(docs, labels, nNeurons, embeddingFile=None, miniBatchSize=-1, initW
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, trainedWeightFile)
-    end = time.time()
-    print('training took %f seconds' % ((end-start)/(1.0e9)))
 
 def getTextDataFromFile(fname, key='key', text='text', target='target', delimiter='\t'):
-    print('loading text file %s' % fname)
     table = pandas.read_table(fname)
     docs = table[text].values
     targets = table[target].values
@@ -469,10 +419,8 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #              lr=0.3, epochs=5, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)
 
 docs, labels = getTextDataFromFile('data/rand_docs.txt')
-textParms = genTextParms(docs, 'data/toy_embeddings.txt')
 for cellType in ['rnn', 'gru', 'lstm']:
-    trainRnn(docs, labels, 7,
-             inputTextParms=textParms,
+    trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
              initWeightFile='tmp_outputs/stackedbi_%s_init_weights.txt'%cellType, 
              trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
              lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
