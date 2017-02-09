@@ -4,7 +4,7 @@ import unittest
 '''
 first column of the file must be the term column; the rest of the columns are treated as embedding content
 '''
-def readEmbeddingFile(fname, hasHeader=True, delimiter='\t'):
+def readEmbeddingFile(fname, hasHeader=True, delimiter='\t', setUnk=True):
     ndim = 0
     embeddings = []
     token2Id = dict()
@@ -32,6 +32,8 @@ def readEmbeddingFile(fname, hasHeader=True, delimiter='\t'):
     for i in range(len(tokens)):
         embeddingArray[i] = embeddings[token2Id[tokens[i]]]
         token2Id[tokens[i]] = i
+    if setUnk:
+        embeddingArray.append([0.0000 for i in range(ndim)])
     embeddingArray = np.asarray(embeddingArray)
     return token2Id, embeddingArray
 

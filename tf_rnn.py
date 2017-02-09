@@ -175,14 +175,15 @@ def genTextParms(docs, embeddingFile):
     token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
     maxNumSteps = 0
     lens = []
+    unkId = len(embeddingArray)-1
     for doc in docs:
-        idList = tokens2ids(doc, token2Id)
+        idList = tokens2ids(doc, token2Id, unk=unkId)
         lens.append(len(idList))
         if len(idList) > maxNumSteps:
             maxNumSteps = len(idList)
     inputIds = []
     for doc in docs:
-        ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
+        ids = tokens2ids(doc, token2Id, unk=unkId, maxNumSteps=maxNumSteps)
         inputIds.append(ids)
     inputIds = np.asarray(inputIds, dtype=np.int32)
     lens = np.asarray(lens, dtype=np.int32)
@@ -230,10 +231,11 @@ def trainRnn(docs, labels, nNeurons, embeddingFile=None, miniBatchSize=-1, initW
                                                                                                    learningRate=lr/miniBatchSize, rnnType=rnnType,
                                                                                                    stackedDimList=stackedDimList, task=task,
                                                                                                    cell=cell, tokenSize=tokenSize, nclass=nclass)
-    # for d in docs[:10]:
-    #     print(d)
-    # for l in labels[:10]:
-    #     print(l)
+#     print(embeddingArray)
+#     for d in docs[:10]:
+#         print(d)
+#     for l in labels[:10]:
+#         print(l)
     print('learning rate: %f' % lr)
     print('rnn type: %s' % rnnType)
     print('cell type: %s' % cell)
@@ -246,8 +248,10 @@ def trainRnn(docs, labels, nNeurons, embeddingFile=None, miniBatchSize=-1, initW
             ws = sess.run(tf.trainable_variables())
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, initWeightFile)
         feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
+        print(lens)
+#         print(sess.run(inputTokens, feed_dict=feed_dict))
         print('loss before training: %.14g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
-        # print(sess.run(debugInfo, feed_dict=feed_dict))
+        print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             for j in range(nbatches):
                 start = miniBatchSize*j
@@ -314,13 +318,14 @@ def mapTargets(targets, targetMap):
         for i in range(len(arr)):
             arr[i] = targetMap[arr[i]]
 
+doc0 = "SAS Institute".split()
 doc1 = "apple is a company".split()
-doc2 = "google is another big company".split()
+doc2 = "google is company".split()
 doc3 = "orange is a fruit".split()
 doc4 = "apple google apple google apple google apple google".split()
 doc5 = "blue is a color".split()
 doc6 = "blue orange color apple google company".split()
-doc7 = "google is company".split()
+doc7 = "google is another big company".split()
 docs = [doc1, doc2, doc3, doc4, doc5, doc6]
 # doc1 = "apple".split()
 # docs = [doc1]
@@ -468,11 +473,21 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #              initWeightFile='tmp_outputs/slbinary_t5_%s_init_weights.txt'%cellType, trainedWeightFile='tmp_outputs/slbinary_t5_%s_trained_weights.txt'%cellType,
 #              lr=0.3, epochs=5, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)
 
-docs, labels = getTextDataFromFile('data/rand_docs.txt')
+# docs, labels = getTextDataFromFile('data/rand_docs.txt')
+# textParms = genTextParms(docs, 'data/toy_embeddings.txt')
+# for cellType in ['rnn', 'gru', 'lstm']:
+#     trainRnn(docs, labels, 7,
+#              inputTextParms=textParms,
+#              initWeightFile='tmp_outputs/stackedbi_%s_init_weights.txt'%cellType, 
+#              trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
+#              lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
+
+docs = [doc0, doc7, doc4, doc5]
+labels = [[0.7], [0.8], [0.01], [0.6]]
 textParms = genTextParms(docs, 'data/toy_embeddings.txt')
 for cellType in ['rnn', 'gru', 'lstm']:
     trainRnn(docs, labels, 7,
              inputTextParms=textParms,
-             initWeightFile='tmp_outputs/stackedbi_%s_init_weights.txt'%cellType, 
-             trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
-             lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
+             initWeightFile='tmp_outputs/unk_%s_init_weights.txt'%cellType, 
+             trainedWeightFile='tmp_outputs/unk_%s_trained_weights.txt'%cellType,
+             lr=0.3, epochs=1, rnnType='normal', stackedDimList=[7], cell=cellType, miniBatchSize=100)
