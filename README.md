@@ -1,5 +1,17 @@
 # tf_rnn
-This is a TensorFlow based recurrent neural network for NLP and numeric sequence analysis. It supports sequence classification and regression and it also supports classification and regression for each token (timestep).
+This is a TensorFlow based recurrent neural network for NLP and numeric sequence analysis. I created this partly for learning TensorFlow and partly for numeric validation of a work project. It supports text or numeric sequence classification and regression. It also supports classification and regression for each token (timestep). Here's an example of how to do text classification with three types of stacked bi-directional recurrent networks and output weights to text files. 
+
+docs, labels = getTextDataFromFile('data/rand_docs.txt')
+textParms = genTextParms(docs, 'data/toy_embeddings.txt')
+for cellType in ['rnn', 'gru', 'lstm']:
+    trainRnn(docs, labels, 7,
+             inputTextParms=textParms,
+             initWeightFile='tmp_outputs/stackedbi_%s_init_weights.txt'%cellType, 
+             trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
+             lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
+             
+             
+More sample usages can be found at the end of tf_rnn.py.
 
 Some simple data sets are included:
 * movie_reviews.txt is text data with sentiment scores converted from Stanford sentiment TreeBank data set (see movie_reviews_readme.txt for more details).
