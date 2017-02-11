@@ -38,6 +38,7 @@ def getRnnLayers(stackedDimList, inputData, inputLens, cellTypes='rnn', acts=tf.
     cellTypes = scaleToList(cellTypes, len(stackedDimList))
     acts = scaleToList(acts, len(stackedDimList))
     rnnTypes = scaleToList(rnnTypes, len(stackedDimList)) 
+    last_states = None
     for i in range(len(stackedDimList)):
         n = stackedDimList[i]
         cellType = cellTypes[i]
@@ -67,7 +68,7 @@ def getRnnLayers(stackedDimList, inputData, inputLens, cellTypes='rnn', acts=tf.
 
 def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
                         bias_trainable=True, learningRate=0.1, rnnType='normal', stackedDimList=[],
-                        task='perseq', cell='rnn', nclass=0, seed=None):
+                        act=tf.tanh, task='perseq', cell='rnn', nclass=0, seed=None):
     tf.reset_default_graph()
     if seed is not None:
         tf.set_random_seed(seed)
@@ -142,8 +143,36 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
     # last return is output to screen for debugging purpose
     return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, flattened_outputs
 
+def genTextParms(docs, embeddingFile):
+    textParms = {}
+    print('loading embedding file %s' % embeddingFile)
+    token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
+    maxNumSteps = 0
+    lens = []
+    for doc in docs:
+        idList = tokens2ids(doc, token2Id)
+        lens.append(len(idList))
+        if len(idList) > maxNumSteps:
+            maxNumSteps = len(idList)
+    inputIds = []
+    for doc in docs:
+        ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
+        inputIds.append(ids)
+    inputIds = np.asarray(inputIds, dtype=np.int32)
+    lens = np.asarray(lens, dtype=np.int32)
+    embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
+    textParms['ids'] = inputIds
+    textParms['lens'] = lens
+    textParms['emb'] = embeddingArray
+    textParms['maxl'] = maxNumSteps
+    return textParms
+
+def parseTextParms(inputTextParms):
+    return inputTextParms['ids'], inputTextParms['lens'], inputTextParms['emb'], inputTextParms['maxl']
+
 def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
-             rnnType='normal', stackedDimList=[], task='perseq', cell='rnn', tokenSize=1, nclass=0, seed=None):
+             rnnType='normal', stackedDimList=[], task='perseq', cell='rnn', tokenSize=1, nclass=0, seed=None,
+             inputTextParms=None):
     assert len(docs) == len(labels)
     maxNumSteps = 0
     ndocs = len(docs)
@@ -153,20 +182,11 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
     if ndocs % miniBatchSize > 0:
         nbatches += 1
     lens = []
-    if embeddingFile is not None:
-        token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
-        for doc in docs:
-            idList = tokens2ids(doc, token2Id)
-            lens.append(len(idList))
-            if len(idList) > maxNumSteps:
-                maxNumSteps = len(idList)
-        inputIds = []
-        for doc in docs:
-            ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
-            inputIds.append(ids)
-        inputIds = np.asarray(inputIds, dtype=np.int32)
-        lens = np.asarray(lens, dtype=np.int32)
-        embeddingArray = np.asarray(embeddingArray, dtype=np.float64)
+    if inputTextParms is not None:
+        inputIds, lens, embeddingArray, maxNumSteps = parseTextParms(inputTextParms)   
+    elif embeddingFile is not None:
+        inputTextParms = genTextParms(docs, embeddingFile) 
+        inputIds, lens, embeddingArray, maxNumSteps = parseTextParms(inputTextParms)
     else:
         lens = [int(len(doc)/tokenSize) for doc in docs]
         lens = np.asarray(lens, dtype=np.int32)
@@ -419,8 +439,10 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #              lr=0.3, epochs=5, rnnType='bi', task='perstep', stackedDimList=[6, 5, 7], cell=cellType, miniBatchSize=11, tokenSize=5, nclass=2)
 
 docs, labels = getTextDataFromFile('data/rand_docs.txt')
+textParms = genTextParms(docs, 'data/toy_embeddings.txt')
 for cellType in ['rnn', 'gru', 'lstm']:
-    trainRnn(docs, labels, 7, 'data/toy_embeddings.txt',
+    trainRnn(docs, labels, 7,
+             inputTextParms=textParms,
              initWeightFile='tmp_outputs/stackedbi_%s_init_weights.txt'%cellType, 
              trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
-             lr=0.3, epochs=1, rnnType='stackedbi', stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
+             lr=0.3, epochs=1, rnnType=['bi', 'bi', 'uni'], stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
