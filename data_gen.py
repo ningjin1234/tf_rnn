@@ -70,9 +70,10 @@ def createNumData(fname, tokenSize, l, nobs, nclass=0):
 # example of how to create random text docs
 words = getWords('data/toy_embeddings.txt')
 # createTextData('data/rand_docs.txt', words, lenMean=10, lenStd=5, ndocs=100, ntargets=7)
-createTextData('data/long_docs.txt', words, lenMean=100, lenStd=10, ndocs=300, ntargets=50)
+# createTextData('data/long_docs.txt', words, lenMean=100, lenStd=10, ndocs=300, ntargets=50)
 
 # example of how to create random numeric sequences
 # createNumData('data/rand_num_t7_l23.txt', 5, 23, 600)
 
 # createNumData('data/rand_num_t7_l23_binary.txt', 5, 23, 600, nclass=2)
+createNumData('data/rand_num_t1_l3_30_multiclass.txt', 1, 3, 30, nclass=7)
