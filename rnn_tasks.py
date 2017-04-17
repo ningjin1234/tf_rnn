@@ -258,7 +258,7 @@ def getTextDataFromFile(fname, key='key', text='text', target='target', delimite
         labels.append([t])
     return tokenized, labels
 
-def getNumDataFromFile(fname, inputLen, targetLen, delimiter='\t'):
+def getNumDataFromFile(fname, inputLen, targetLen, delimiter='\t', inputStartId=1):
     inputs = []
     targets = []
     with open(fname, 'r') as fin:
@@ -267,7 +267,7 @@ def getNumDataFromFile(fname, inputLen, targetLen, delimiter='\t'):
             splitted = line.strip().split(delimiter)
             invec = []
             outvec = []
-            splitted = splitted[1:]
+            splitted = splitted[inputStartId:]
             assert (len(splitted) >= inputLen+targetLen)
             for v in splitted[:inputLen]:
                 invec.append(float(v))
@@ -283,6 +283,18 @@ def mapTargets(targets, targetMap):
     for arr in targets:
         for i in range(len(arr)):
             arr[i] = targetMap[arr[i]]
+
+def discretizeTargets(targets, bins):
+    for arr in targets:
+        for i in range(len(arr)):
+            discretized = False
+            for j in range(len(bins)):
+                if arr[i] < bins[j]:
+                    arr[i] = j
+                    discretized = True
+                    break
+            if not discretized:
+                arr[i] = len(bins)
 
 doc1 = "apple is a company".split()
 doc2 = "google is another big company".split()
