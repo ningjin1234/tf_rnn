@@ -1,6 +1,19 @@
 import pandas
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import ctc_ops
+
+# x is a list of lists, where first dimension is number of batches
+def denseFeedToSparseFeed(x):
+    x_ix = []
+    x_val = []
+    for batch_i, batch in enumerate(x):
+      for time, val in enumerate(batch):
+        x_ix.append([batch_i, time])
+        x_val.append(val)
+    x_shape = [len(x), np.asarray(x_ix).max(0)[1] + 1]
+  
+    return (x_ix, x_val, x_shape)
 
 def getRnnCell(nNeurons, cell='rnn', nCells=1, act=tf.tanh):
     ret = []
@@ -73,6 +86,7 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
     tf.reset_default_graph()
     if seed is not None:
         tf.set_random_seed(seed)
+    useCTCLoss = (task.lower()=='ctc')
     inputTokens = tf.placeholder(tf.int32, [None, maxNumSteps])
     inputLens = tf.placeholder(tf.int32, [None])
     if task.lower() in ['perseq']:
@@ -85,6 +99,8 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
             targets = tf.placeholder(tf.float32, [None, maxNumSteps])
         else:
             targets = tf.placeholder(tf.int32, [None])
+    elif task.lower() == 'ctc':
+           targets = tf.sparse_placeholder(tf.int32, [None, None]) 
     else:
         raise ValueError("unsupported task type: %s" % task)        
 
@@ -109,12 +125,14 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
         else:
             index = tf.range(0, batchSize) * maxNumSteps + inputLens - 1
         outputs = tf.gather(flattened_outputs, index)
-    else:
+    elif task.lower() in ['pertoken', 'perstep']:
         outputs = flattened_outputs
         if nclass <= 1:
             targets = tf.reshape(targets, [-1, 1])
         else:
             targets = tf.reshape(targets, [-1])
+    elif task.lower() in ['ctc']:
+        outputs = flattened_outputs
     nclass = 1 if nclass <= 1 else nclass
     outputW = tf.get_variable("outputW", [nNeurons, nclass], dtype=tf.float32)
     outputB = tf.get_variable("outputB", [nclass], dtype=tf.float32)
@@ -127,6 +145,13 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
             softmax = tf.nn.softmax(logits) # for debugging purpose
             losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
             loss = tf.reduce_sum(losses)
+    elif useCTCLoss:
+        tf.reshape(prediction, [-1, maxNumSteps, nclass])
+        # ctc_labels needs to be in a sparse format
+        print(tf.shape(prediction))
+        print(tf.shape(targets))
+        losses = ctc_ops.ctc_loss(inputs=prediction, labels=targets, sequence_length=inputLens) 
+        loss = tf.reduce_sum(losses)
     elif task.lower() in ['pertoken', 'perstep']:
         if nclass <= 1:
             loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2/maxNumSteps)
@@ -188,9 +213,10 @@ def genTextParms(docs, embeddingFile):
 def parseTextParms(inputTextParms):
     return inputTextParms['ids'], inputTextParms['lens'], inputTextParms['emb'], inputTextParms['maxl']
 
+# NOTE: when task is "ctc", labels need to be a list of lists, where each second-level list corresponds to one sequence
 def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
              rnnType='normal', stackedDimList=[], task='perseq', cell='rnn', tokenSize=1, nclass=0, seed=None,
-             inputTextParms=None, nSoftmaxSamples=0):
+             inputTextParms=None, nSoftmaxSamples=0, docLens=None):
     assert len(docs) == len(labels)
     maxNumSteps = 0
     ndocs = len(docs)
@@ -206,17 +232,19 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
         inputTextParms = genTextParms(docs, embeddingFile) 
         inputIds, lens, embeddingArray, maxNumSteps = parseTextParms(inputTextParms)
     else:
-        lens = [int(len(doc)/tokenSize) for doc in docs]
+        lens = [int(len(doc)/tokenSize) for doc in docs] if docLens is None else docLens
         lens = np.asarray(lens, dtype=np.int32)
         maxNumSteps = max(lens)
         embeddingArray = None
         inputIds = np.asarray(docs, dtype=np.float32)
         inputIds = np.reshape(inputIds, (ndocs, maxNumSteps, tokenSize))
-        labels = np.asarray(labels, dtype=np.float32)
-        labels = np.reshape(labels, (-1, 1))
-        if nclass>1:
-            labels = np.asarray(labels, dtype=np.int32)
-            labels = np.reshape(labels, (-1))
+        # when using CTC loss, labels need to be stored in sparse format
+        if task.lower() != 'ctc':
+            labels = np.asarray(labels, dtype=np.float32)
+            labels = np.reshape(labels, (-1, 1))
+            if nclass>1:
+                labels = np.asarray(labels, dtype=np.int32)
+                labels = np.reshape(labels, (-1))
     inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, learningRate, debugInfo = getRnnTrainOps(maxNumSteps=maxNumSteps,
                                                                                                    seed=seed, initEmbeddings=embeddingArray,
                                                                                                    learningRate=lr/miniBatchSize, rnnType=rnnType,
@@ -238,7 +266,8 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
         if initWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, initWeightFile)
-        feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
+        feed_labels = labels if task.lower() != 'ctc' else denseFeedToSparseFeed(labels)
+        feed_dict = {inputTokens:inputIds, inputLens:lens, targets:feed_labels}
         print('loss before training: %.14g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
 #         print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
@@ -257,10 +286,11 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
                     else:
                         subTargets = labels[start*maxNumSteps:end*maxNumSteps]
                 sess.run(learningRate.assign(lr/(end-start)))
-                feed_dict = {inputTokens:inputIds[start:end], inputLens:lens[start:end], targets:subTargets}
-                evalList = [loss, gradients, learningStep]
-                for namei in range(0, 3):
-                    evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/LogUniformCandidateSampler:%d'%namei))
+                feed_labels = subTargets if task.lower() != 'ctc' else denseFeedToSparseFeed(subTargets)
+                feed_dict = {inputTokens:inputIds[start:end], inputLens:lens[start:end], targets:feed_labels}
+#                 evalList = [loss, gradients, learningStep]
+#                 for namei in range(0, 3):
+#                     evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/LogUniformCandidateSampler:%d'%namei))
 #                 print(sess.run(debugInfo, feed_dict=feed_dict))
 #                 print('\tbefore batch %d: %.14g' % (j, sess.run(loss, feed_dict=feed_dict)/(end-start)))
 #                 for op in sess.graph.get_operations():
@@ -273,14 +303,15 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
 #                 print(sess.run(t, feed_dict=feed_dict))
 #                 sess.run(learningStep, feed_dict=feed_dict)
 #                 evalList.append(debugInfo)
-                evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/sub:0'))
-                evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/sub_1:0'))
-                res = sess.run(evalList, feed_dict=feed_dict)
-                print(res[1])
-                print(res[3], res[4], res[5])
+#                 evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/sub:0'))
+#                 evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/sub_1:0'))
+#                 res = sess.run(evalList, feed_dict=feed_dict)
+#                 print(res[1])
+#                 print(res[3], res[4], res[5])
 #                 print(res[6], res[7])
                 print('\tbefore batch %d: %.14g' % (j, res[0]/(end-start)))
-            feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
+            feed_labels = labels if task.lower() != 'ctc' else denseFeedToSparseFeed(labels)
+            feed_dict = {inputTokens:inputIds, inputLens:lens, targets:feed_labels}
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/ndocs))
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
@@ -499,14 +530,22 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #              trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
 #              lr=0.3, epochs=1, rnnType=['bi', 'bi', 'uni'], stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
 
-inputs, targets = getNumDataFromFile('data/toy_num_t1_l1_2_multiclass.txt', 1, 1)
-print(len(inputs))
-print(len(inputs[0]))
-targetMap = {0:1, 1:0, 2:2, 3:3, 4:4, 5:5, 6:6}
-mapTargets(targets, targetMap)
-for cellType in ['rnn']:
-    trainRnn(inputs, targets, None,
-             initWeightFile='tmp_outputs/slmulti_t1_%s_init_weights.txt'%cellType, 
-             trainedWeightFile='tmp_outputs/slmulti_t1_%s_trained_weights.txt'%cellType,
-             lr=0.1, epochs=1, rnnType=['uni'], task='perstep', stackedDimList=[4], cell=cellType, miniBatchSize=1, tokenSize=1, nclass=2, 
-             nSoftmaxSamples=1, seed=123)
+# inputs, targets = getNumDataFromFile('data/toy_num_t1_l1_2_multiclass.txt', 1, 1)
+# print(len(inputs))
+# print(len(inputs[0]))
+# targetMap = {0:1, 1:0, 2:2, 3:3, 4:4, 5:5, 6:6}
+# mapTargets(targets, targetMap)
+# for cellType in ['rnn']:
+#     trainRnn(inputs, targets, None,
+#              initWeightFile='tmp_outputs/slmulti_t1_%s_init_weights.txt'%cellType, 
+#              trainedWeightFile='tmp_outputs/slmulti_t1_%s_trained_weights.txt'%cellType,
+#              lr=0.1, epochs=1, rnnType=['uni'], task='perstep', stackedDimList=[4], cell=cellType, miniBatchSize=1, tokenSize=1, nclass=2, 
+#              nSoftmaxSamples=1, seed=123)
+
+inputs = [[1.0,2.0,3.0,1.0,5.0,-1.0,3.0,4.0,1.0], [2.0,3.0,-3.0,-1.0,-5.0,-3.0,2.0,6.0,-999],
+          [-1.0,-2.0,2.0,8.0,-5.0,-2.0,1.0,7.0,5.0], [-1.0,-2.0,-3.0,-1.0,-5.0,-4.0,-999,-999,-999]]
+inputLens = [9, 8, 9, 6]
+targets = [[0, 1, 2], [3, 4], [5, 4, 3], [1]]
+trainRnn(inputs, targets, None, docLens=inputLens, nclass=7,
+         initWeightFile='tmp_outputs/ctc_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_rnn_trained_weights.txt',
+         lr=1, epochs=10, rnnType='bi', task='ctc', stackedDimList=[5])
