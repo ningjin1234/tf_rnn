@@ -139,6 +139,7 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
             else:
                 loss = None
                 batchSize = tf.shape(inputLens)[0]
+                allLosses = []
                 for i in range(maxNumSteps):
                     index = tf.range(0, batchSize) * maxNumSteps + i
                     stepTargets = tf.gather(targets, index)
@@ -146,6 +147,7 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
                     stepOutputs = tf.gather(outputs, index)
                     losses = tf.nn.sampled_softmax_loss(tf.transpose(outputW), outputB, stepOutputs, targets_2d, 
                                                         nSoftmaxSamples, nclass, remove_accidental_hits=False)
+                    allLosses.append(losses)
                     if loss is None:
                         loss = tf.reduce_sum(losses/maxNumSteps)
                     else:
@@ -157,7 +159,7 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.global_variables_initializer()
     # last return is output to screen for debugging purpose
-    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, flattened_outputs
+    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, outputs
 
 def genTextParms(docs, embeddingFile):
     textParms = {}
@@ -230,7 +232,6 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
     print('cell type: %s' % cell)
     print('task type: %s' % task)
     print('mini-batch size: %d' % miniBatchSize)
-
     
     with tf.Session() as sess:
         sess.run(initAll)
@@ -239,7 +240,7 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, initWeightFile)
         feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
         print('loss before training: %.14g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
-        # print(sess.run(debugInfo, feed_dict=feed_dict))
+#         print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             for j in range(nbatches):
                 start = miniBatchSize*j
@@ -257,15 +258,28 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
                         subTargets = labels[start*maxNumSteps:end*maxNumSteps]
                 sess.run(learningRate.assign(lr/(end-start)))
                 feed_dict = {inputTokens:inputIds[start:end], inputLens:lens[start:end], targets:subTargets}
-                print('\tbefore batch %d: %.14g' % (j, sess.run(loss, feed_dict=feed_dict)/(end-start)))
-                sess.run(learningStep, feed_dict=feed_dict)
-                for op in sess.graph.get_operations():
-                    if 'loguniform' in op.name.lower():
-                        for t in op.values():
+                evalList = [loss, gradients, learningStep]
+                for namei in range(0, 3):
+                    evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/LogUniformCandidateSampler:%d'%namei))
+#                 print(sess.run(debugInfo, feed_dict=feed_dict))
+#                 print('\tbefore batch %d: %.14g' % (j, sess.run(loss, feed_dict=feed_dict)/(end-start)))
+#                 for op in sess.graph.get_operations():
+#                     if 'sampled_softmax_loss' in op.name.lower() and 'grad' not in op.name.lower():
+#                         for t in op.values():
 #                             print(t)
-                            print(sess.run(t,feed_dict=feed_dict))
+#                             print(sess.run([t, debugInfo],feed_dict=feed_dict))
+#                             print(sess.run(t,feed_dict=feed_dict))
 #                 t = tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/LogUniformCandidateSampler:0')
 #                 print(sess.run(t, feed_dict=feed_dict))
+#                 sess.run(learningStep, feed_dict=feed_dict)
+#                 evalList.append(debugInfo)
+                evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/sub:0'))
+                evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/sub_1:0'))
+                res = sess.run(evalList, feed_dict=feed_dict)
+                print(res[1])
+                print(res[3], res[4], res[5])
+#                 print(res[6], res[7])
+                print('\tbefore batch %d: %.14g' % (j, res[0]/(end-start)))
             feed_dict = {inputTokens:inputIds, inputLens:lens, targets:labels}
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/ndocs))
         if trainedWeightFile is not None:
@@ -473,7 +487,7 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #              trainedWeightFile='tmp_outputs/stackedbi_%s_trained_weights.txt'%cellType,
 #              lr=0.3, epochs=1, rnnType=['bi', 'bi', 'uni'], stackedDimList=[16, 10, 7], cell=cellType, miniBatchSize=21)
 
-inputs, targets = getNumDataFromFile('data/toy_num_t1_l3_2_multiclass.txt', 3, 3)
+inputs, targets = getNumDataFromFile('data/toy_num_t1_l1_2_multiclass.txt', 1, 1)
 print(len(inputs))
 print(len(inputs[0]))
 targetMap = {0:1, 1:0, 2:2, 3:3, 4:4, 5:5, 6:6}
@@ -483,4 +497,4 @@ for cellType in ['rnn']:
              initWeightFile='tmp_outputs/slmulti_t1_%s_init_weights.txt'%cellType, 
              trainedWeightFile='tmp_outputs/slmulti_t1_%s_trained_weights.txt'%cellType,
              lr=0.1, epochs=1, rnnType=['uni'], task='perstep', stackedDimList=[4], cell=cellType, miniBatchSize=1, tokenSize=1, nclass=2, 
-             nSoftmaxSamples=1, seed=32513)
+             nSoftmaxSamples=1, seed=123)
