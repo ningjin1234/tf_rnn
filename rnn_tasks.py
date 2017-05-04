@@ -146,11 +146,11 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
             losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
             loss = tf.reduce_sum(losses)
     elif useCTCLoss:
-        tf.reshape(prediction, [-1, maxNumSteps, nclass])
+        prediction = tf.reshape(prediction, [-1, maxNumSteps, nclass])
         # ctc_labels needs to be in a sparse format
-        print(tf.shape(prediction))
-        print(tf.shape(targets))
-        losses = ctc_ops.ctc_loss(inputs=prediction, labels=targets, sequence_length=inputLens) 
+        print(prediction)
+        print(targets)
+        losses = ctc_ops.ctc_loss(inputs=prediction, labels=targets, sequence_length=inputLens, time_major=False) 
         loss = tf.reduce_sum(losses)
     elif task.lower() in ['pertoken', 'perstep']:
         if nclass <= 1:
@@ -309,7 +309,8 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
 #                 print(res[1])
 #                 print(res[3], res[4], res[5])
 #                 print(res[6], res[7])
-                print('\tbefore batch %d: %.14g' % (j, res[0]/(end-start)))
+#                 print('\tbefore batch %d: %.14g' % (j, res[0]/(end-start)))
+                sess.run(learningStep, feed_dict=feed_dict)
             feed_labels = labels if task.lower() != 'ctc' else denseFeedToSparseFeed(labels)
             feed_dict = {inputTokens:inputIds, inputLens:lens, targets:feed_labels}
             print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/ndocs))
@@ -548,4 +549,4 @@ inputLens = [9, 8, 9, 6]
 targets = [[0, 1, 2], [3, 4], [5, 4, 3], [1]]
 trainRnn(inputs, targets, None, docLens=inputLens, nclass=7,
          initWeightFile='tmp_outputs/ctc_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_rnn_trained_weights.txt',
-         lr=1, epochs=10, rnnType='bi', task='ctc', stackedDimList=[5])
+         lr=0.1, epochs=10, rnnType='bi', task='ctc', stackedDimList=[5])
