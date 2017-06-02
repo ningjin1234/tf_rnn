@@ -2,6 +2,7 @@ import pandas
 from tkdl_util import *
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import ctc_ops
+from tensorflow.python.ops import gradients_impl
 
 # x is a list of lists, where first dimension is number of batches
 def denseFeedToSparseFeed(x):
@@ -152,6 +153,7 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
         print(targets)
         losses = ctc_ops.ctc_loss(inputs=prediction, labels=targets, sequence_length=inputLens, time_major=False) 
         loss = tf.reduce_sum(losses)
+        ctc_gradients = gradients_impl.gradients(loss, [prediction])[0]
     elif task.lower() in ['pertoken', 'perstep']:
         if nclass <= 1:
             loss = tf.reduce_sum(tf.pow(prediction-targets, 2)/2/maxNumSteps)
@@ -184,34 +186,15 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
     learningStep = optimizer.minimize(loss, var_list=tvars)
     initAll = tf.global_variables_initializer()
     # last return is output to screen for debugging purpose
-    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, outputs
+    return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, ctc_gradients
 
-def genTextParms(docs, embeddingFile):
-    textParms = {}
-    print('loading embedding file %s' % embeddingFile)
-    token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
-    maxNumSteps = 0
-    lens = []
-    for doc in docs:
-        idList = tokens2ids(doc, token2Id)
-        lens.append(len(idList))
-        if len(idList) > maxNumSteps:
-            maxNumSteps = len(idList)
-    inputIds = []
-    for doc in docs:
-        ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
-        inputIds.append(ids)
-    inputIds = np.asarray(inputIds, dtype=np.int32)
-    lens = np.asarray(lens, dtype=np.int32)
-    embeddingArray = np.asarray(embeddingArray, dtype=np.float32)
-    textParms['ids'] = inputIds
-    textParms['lens'] = lens
-    textParms['emb'] = embeddingArray
-    textParms['maxl'] = maxNumSteps
-    return textParms
-
-def parseTextParms(inputTextParms):
-    return inputTextParms['ids'], inputTextParms['lens'], inputTextParms['emb'], inputTextParms['maxl']
+# m is a list of lists and each element list in m may have different length;
+# this function pads all element lists to the max length
+def pad_2d_list(m, pad=0):
+    lens = [len(v) for v in m]
+    max_lens = max(lens)
+    res = [v+[pad for _ in range(max_lens-len(v))] for v in m]
+    return res
 
 # NOTE: when task is "ctc", labels need to be a list of lists, where each second-level list corresponds to one sequence
 def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
@@ -268,20 +251,20 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, initWeightFile)
         feed_labels = labels if task.lower() != 'ctc' else denseFeedToSparseFeed(labels)
         feed_dict = {inputTokens:inputIds, inputLens:lens, targets:feed_labels}
-        print('loss before training: %.14g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
+        print('loss before training: %.7g' % (sess.run(loss, feed_dict=feed_dict)/ndocs))
 #         print(sess.run(debugInfo, feed_dict=feed_dict))
         for i in range(epochs):
             for j in range(nbatches):
                 start = miniBatchSize*j
                 if j < nbatches - 1:
                     end = miniBatchSize * (j+1)
-                    if task.lower() in ['perseq']:
+                    if task.lower() in ['perseq', 'ctc']:
                         subTargets = labels[start:end]
                     else:
                         subTargets = labels[start*maxNumSteps:end*maxNumSteps]
                 else:
                     end = ndocs
-                    if task.lower() in ['perseq']:
+                    if task.lower() in ['perseq', 'ctc']:
                         subTargets = labels[start:end]
                     else:
                         subTargets = labels[start*maxNumSteps:end*maxNumSteps]
@@ -292,7 +275,7 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
 #                 for namei in range(0, 3):
 #                     evalList.append(tf.get_default_graph().get_tensor_by_name('sampled_softmax_loss/LogUniformCandidateSampler:%d'%namei))
 #                 print(sess.run(debugInfo, feed_dict=feed_dict))
-#                 print('\tbefore batch %d: %.14g' % (j, sess.run(loss, feed_dict=feed_dict)/(end-start)))
+#                 print('\tbefore batch %d: %.7g' % (j, sess.run(loss, feed_dict=feed_dict)/(end-start)))
 #                 for op in sess.graph.get_operations():
 #                     if 'sampled_softmax_loss' in op.name.lower() and 'grad' not in op.name.lower():
 #                         for t in op.values():
@@ -309,11 +292,12 @@ def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None,
 #                 print(res[1])
 #                 print(res[3], res[4], res[5])
 #                 print(res[6], res[7])
-#                 print('\tbefore batch %d: %.14g' % (j, res[0]/(end-start)))
+#                 print('\tbefore batch %d: %.7g' % (j, res[0]/(end-start)))
+#                 print(sess.run(debugInfo, feed_dict=feed_dict))
                 sess.run(learningStep, feed_dict=feed_dict)
             feed_labels = labels if task.lower() != 'ctc' else denseFeedToSparseFeed(labels)
             feed_dict = {inputTokens:inputIds, inputLens:lens, targets:feed_labels}
-            print('loss after %d epochs: %.14g' % (i+1, sess.run(loss, feed_dict=feed_dict)/ndocs))
+            print('loss after %d epochs: %.7g' % (i+1, sess.run(loss, feed_dict=feed_dict)/ndocs))
         if trainedWeightFile is not None:
             ws = sess.run(tf.trainable_variables())
             writeWeightsWithNames(ws, tf.trainable_variables(), stackedDimList, trainedWeightFile)
@@ -543,10 +527,20 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #              lr=0.1, epochs=1, rnnType=['uni'], task='perstep', stackedDimList=[4], cell=cellType, miniBatchSize=1, tokenSize=1, nclass=2, 
 #              nSoftmaxSamples=1, seed=123)
 
+# lists in inputs need to have the same dimension in order to be converted to ndarray later, so dummy placeholder -999 is used
 inputs = [[1.0,2.0,3.0,1.0,5.0,-1.0,3.0,4.0,1.0], [2.0,3.0,-3.0,-1.0,-5.0,-3.0,2.0,6.0,-999],
           [-1.0,-2.0,2.0,8.0,-5.0,-2.0,1.0,7.0,5.0], [-1.0,-2.0,-3.0,-1.0,-5.0,-4.0,-999,-999,-999]]
 inputLens = [9, 8, 9, 6]
-targets = [[0, 1, 2], [3, 4], [5, 4, 3], [1]]
-trainRnn(inputs, targets, None, docLens=inputLens, nclass=7,
+targets = [[1, 0, 5], [2, 4], [3, 4, 5], [0]]
+trainRnn(inputs, targets, None, docLens=inputLens, nclass=7, miniBatchSize=4,
          initWeightFile='tmp_outputs/ctc_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_rnn_trained_weights.txt',
-         lr=0.1, epochs=10, rnnType='bi', task='ctc', stackedDimList=[5])
+         lr=0.1, epochs=20, rnnType='bi', task='ctc', stackedDimList=[5], cell='rnn', seed=123)
+
+# lists in inputs need to have the same dimension in order to be converted to ndarray later, so dummy placeholder -999 is used
+inputs = [[1.0,2.0,3.0,1.0,5.0,-1.0,3.0,4.0], [2.0,3.0,-3.0,-1.0,-5.0,-3.0,2.0,6.0],
+          [-1.0,-2.0,2.0,8.0,-5.0,-2.0,1.0,7.0], [-1.0,-2.0,-3.0,-1.0,-5.0,-4.0,-999,-999]]
+inputLens = [4, 3, 4, 3]
+targets = [[1, 0, 5], [2, 4], [3, 4, 5], [0]]
+trainRnn(inputs, targets, None, docLens=inputLens, nclass=7, miniBatchSize=4, tokenSize=2,
+         initWeightFile='tmp_outputs/ctc_t2_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_t2_rnn_trained_weights.txt',
+         lr=0.1, epochs=20, rnnType='bi', task='ctc', stackedDimList=[5], cell='rnn', seed=123)

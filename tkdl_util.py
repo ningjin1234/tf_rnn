@@ -1,10 +1,11 @@
 import tensorflow as tf
 import numpy as np
 import unittest
+import nltk
 '''
 first column of the file must be the term column; the rest of the columns are treated as embedding content
 '''
-def readEmbeddingFile(fname, hasHeader=True, delimiter='\t', setUnk=True):
+def readEmbeddingFile(fname, hasHeader=True, delimiter='\t', setUnk=True, ret_ndarray=True):
     ndim = 0
     embeddings = []
     token2Id = dict()
@@ -34,7 +35,8 @@ def readEmbeddingFile(fname, hasHeader=True, delimiter='\t', setUnk=True):
         token2Id[tokens[i]] = i
     if setUnk:
         embeddingArray.append([0.0000 for i in range(ndim)])
-    embeddingArray = np.asarray(embeddingArray)
+    if ret_ndarray:
+        embeddingArray = np.asarray(embeddingArray)
     return token2Id, embeddingArray
 
 # input is a list of strings where each element is one token
@@ -53,6 +55,92 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
             for i in range(maxNumSteps-len(ids)):
                 ids.append(0)
     return ids
+
+def my_tokenize(doc):
+    tmp = nltk.word_tokenize(doc)
+    res = []
+    for t in tmp:
+        if not '-' in t:
+            ts = [t]
+        else:
+            ts = nltk.wordpunct_tokenize(t)    
+        for v in ts:
+            if v == '``':
+                v = '"'
+            elif v == "''":
+                v = '"'
+            res.append(v)
+    return res
+
+def genTextParms(docs, embeddingFile):
+    textParms = {}
+    print('loading embedding file %s' % embeddingFile)
+    token2Id, embeddingArray = readEmbeddingFile(embeddingFile)
+    maxNumSteps = 0
+    lens = []
+    for doc in docs:
+        idList = tokens2ids(doc, token2Id)
+        lens.append(len(idList))
+        if len(idList) > maxNumSteps:
+            maxNumSteps = len(idList)
+    inputIds = []
+    for doc in docs:
+        ids = tokens2ids(doc, token2Id, maxNumSteps=maxNumSteps)
+        inputIds.append(ids)
+    inputIds = np.asarray(inputIds, dtype=np.int32)
+    lens = np.asarray(lens, dtype=np.int32)
+    embeddingArray = np.asarray(embeddingArray, dtype=np.float32)
+    textParms['ids'] = inputIds
+    textParms['lens'] = lens
+    textParms['emb'] = embeddingArray
+    textParms['maxl'] = maxNumSteps
+    textParms['token2id'] = token2Id
+    return textParms
+
+# directly updates token2id and emb_arr
+def expand_embedding_with_oovs(all_tokens, token2id, emb_arr, min_cnt=1):
+    unknown_cnt = dict()
+    for l in all_tokens:
+        for t in l:
+            if not t in token2id:
+                if not t in unknown_cnt:
+                    unknown_cnt[t] = 1
+                else:
+                    unknown_cnt[t] += 1
+    ndim = len(emb_arr[0])
+    for t,c in unknown_cnt.items():
+        if c >= min_cnt:
+            token2id[t] = len(emb_arr)
+            emb_arr.append([0.0 for _ in range(ndim)])
+    
+# all_tokens is a list, where each element is a list of tokens
+def get_text_parms_with_oovs(all_tokens, emb_fname=None, has_header=False, delimiter='\t', min_cnt=1, token2id=None, emb_arr=None):
+    if emb_fname is None and token2id is None and emb_arr is None:
+        raise ValueError('insufficient information to generate/update embeddings')
+    # generate term-to-id mapping and embedding array (as list) based on embedding file 
+    if token2id is None or emb_arr is None:
+        token2id, emb_arr = readEmbeddingFile(emb_fname, hasHeader=has_header, delimiter=delimiter, setUnk=False, ret_ndarray=False)
+    # expand mapping and embedding array with OOV words
+    expand_embedding_with_oovs(all_tokens, token2id, emb_arr, min_cnt=min_cnt)
+    # get length list
+    lens = [len(l) for l in all_tokens]
+    max_len = max(lens)
+    # get token id lists with padding
+    tid_lists = []
+    for l in all_tokens:
+        tid_l = tokens2ids(l, token2id, maxNumSteps=max_len)
+        tid_lists.append(tid_l)
+    parms = dict()
+    parms['ids'] = tid_lists
+    parms['lens'] = lens
+    parms['emb'] = emb_arr
+    parms['maxl'] = max_len
+    parms['token2id'] = token2id
+    return parms
+
+def parseTextParms(inputTextParms):
+    return inputTextParms['ids'], inputTextParms['lens'], inputTextParms['emb'], inputTextParms['maxl']
+
 
 def getLayerName(fullName):
     cellTypes = ['BasicRNNCell', 'GRUCell', 'LSTMCell', 'output']
@@ -150,6 +238,22 @@ class TestTkdlUtil(unittest.TestCase):
         self.assertEqual(embeddingArray[token2Id['apple']].tolist(), [2.,1.,0.])
         self.assertEqual(embeddingArray[token2Id['fruit']].tolist(), [8.,0.25,0.125])
         print('testLoadEmbedding passed')
+    def test_get_text_parms_with_oovs(self):
+        emb_truth = {}
+        emb_truth['google'] = [0.001,0.9,0.0012]
+        emb_truth['is'] = [0.0125,0.0125,0.0125]
+        emb_truth['company'] = [0.0,1.0,0.0]
+        emb_truth['color'] = [0.0125,0.025,1.0]
+        all_tokens = [['google', 'is', 'another', 'company'], ['google', 'is', 'not', 'color', '!']]
+        parms = get_text_parms_with_oovs(all_tokens, emb_fname='toyEmbedding3.csv', has_header=True, delimiter=',')
+        self.assertEqual(len(parms['emb']), 14)
+        emb_arr = parms['emb']
+        token2id = parms['token2id']
+        for t in ['another', 'not', '!']:
+            self.assertEqual(emb_arr[token2id[t]], [0.0, 0.0, 0.0])
+        for t in ['google', 'is', 'company', 'color']:
+            self.assertEqual(emb_arr[token2id[t]], emb_truth[t])
+        print('test_get_text_parms_with_oovs passed')
 
 # if __name__ == "__main__":
 #     unittest.main()
