@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 import unittest
 import nltk
+import pandas as pd
+from numpy.testing import assert_array_equal
 '''
 first column of the file must be the term column; the rest of the columns are treated as embedding content
 '''
@@ -96,6 +98,12 @@ def genTextParms(docs, embeddingFile):
     textParms['maxl'] = maxNumSteps
     textParms['token2id'] = token2Id
     return textParms
+
+def get_seq_masks(lens, maxl=None):
+    maxl = max(lens) if maxl is None else maxl
+    masks = [[1 if i<l else 0 for i in range(maxl)] for l in lens]
+    masks = np.asarray(masks, dtype=np.float32)
+    return masks
 
 # directly updates token2id and emb_arr
 def expand_embedding_with_oovs(all_tokens, token2id, emb_arr, min_cnt=1):
@@ -227,6 +235,15 @@ def writeWeightsAux(fout, layerId, wid, matrix):
     return wid
 
 class TestTkdlUtil(unittest.TestCase):
+    def test_get_seq_masks(self):
+        lens = [3,1,0,2]
+        masks = get_seq_masks(lens)
+        expected = np.asarray([[1,1,1],[1,0,0],[0,0,0],[1,1,0]], dtype=np.float32)
+        assert_array_equal(expected, masks)
+        masks = get_seq_masks(lens, maxl=4)
+        expected = np.asarray([[1,1,1,0],[1,0,0,0],[0,0,0,0],[1,1,0,0]], dtype=np.float32)
+        assert_array_equal(expected, masks)
+        print('test_get_seq_masks passed')
     def testLoadEmbedding(self):
         token2Id, embeddingArray = readEmbeddingFile('data/toy_embeddings.txt')
         testSeqs = [['apple', 'is', 'a', 'company'], ['google', 'is', 'another', 'big', 'company']]
