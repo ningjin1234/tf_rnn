@@ -4,6 +4,9 @@ import unittest
 import nltk
 import pandas as pd
 from numpy.testing import assert_array_equal
+
+UNK_TOKEN = '<UNK>'
+
 '''
 first column of the file must be the term column; the rest of the columns are treated as embedding content
 '''
@@ -48,6 +51,8 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
         if not t in token2IdLookup:
             if unk is not None:
                 ids.append(unk)
+            else:
+                raise ValueError("no word vector for %s" % t)
             continue
         ids.append(token2IdLookup[t])
     if maxNumSteps is not None:
@@ -105,6 +110,14 @@ def get_seq_masks(lens, maxl=None):
     masks = np.asarray(masks, dtype=np.float32)
     return masks
 
+# m is a list of lists and each element list in m may have different length;
+# this function pads all element lists to the max length
+def pad_2d_list(m, pad=0):
+    lens = [len(v) for v in m]
+    max_lens = max(lens)
+    res = [v+[pad for _ in range(max_lens-len(v))] for v in m]
+    return res
+
 # directly updates token2id and emb_arr
 def expand_embedding_with_oovs(all_tokens, token2id, emb_arr, min_cnt=1):
     unknown_cnt = dict()
@@ -120,6 +133,12 @@ def expand_embedding_with_oovs(all_tokens, token2id, emb_arr, min_cnt=1):
         if c >= min_cnt:
             token2id[t] = len(emb_arr)
             emb_arr.append([0.0 for _ in range(ndim)])
+
+def append_embedding_with_unk(token2id, emb_arr):
+    if UNK_TOKEN in token2id:
+        return
+    token2id[UNK_TOKEN] = len(emb_arr)
+    emb_arr.append([0.0 for _ in range(len(emb_arr[0]))])
     
 # all_tokens is a list, where each element is a list of tokens
 def get_text_parms_with_oovs(all_tokens, emb_fname=None, has_header=False, delimiter='\t', min_cnt=1, token2id=None, emb_arr=None):
@@ -130,13 +149,14 @@ def get_text_parms_with_oovs(all_tokens, emb_fname=None, has_header=False, delim
         token2id, emb_arr = readEmbeddingFile(emb_fname, hasHeader=has_header, delimiter=delimiter, setUnk=False, ret_ndarray=False)
     # expand mapping and embedding array with OOV words
     expand_embedding_with_oovs(all_tokens, token2id, emb_arr, min_cnt=min_cnt)
+    append_embedding_with_unk(token2id, emb_arr)
     # get length list
     lens = [len(l) for l in all_tokens]
     max_len = max(lens)
     # get token id lists with padding
     tid_lists = []
     for l in all_tokens:
-        tid_l = tokens2ids(l, token2id, maxNumSteps=max_len)
+        tid_l = tokens2ids(l, token2id, maxNumSteps=max_len, unk=token2id[UNK_TOKEN])
         tid_lists.append(tid_l)
     parms = dict()
     parms['ids'] = tid_lists
@@ -244,6 +264,12 @@ class TestTkdlUtil(unittest.TestCase):
         expected = np.asarray([[1,1,1,0],[1,0,0,0],[0,0,0,0],[1,1,0,0]], dtype=np.float32)
         assert_array_equal(expected, masks)
         print('test_get_seq_masks passed')
+    def test_pad_2d_list(self):
+        m = [[1,2,3],[1], [], [1,2]]
+        expected = [[1,2,3], [1,0,0], [0,0,0], [1,2,0]]
+        res = pad_2d_list(m)
+        self.assertEqual(expected, res)
+        print('test_pad_2d_list passed')
     def testLoadEmbedding(self):
         token2Id, embeddingArray = readEmbeddingFile('data/toy_embeddings.txt')
         testSeqs = [['apple', 'is', 'a', 'company'], ['google', 'is', 'another', 'big', 'company']]

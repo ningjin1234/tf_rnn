@@ -21,11 +21,11 @@ def getRnnCell(nNeurons, cell='rnn', nCells=1, act=tf.tanh):
     rnnCell = None
     for i in range(nCells):
         if cell == 'rnn':
-            rnnCell = tf.nn.rnn_cell.BasicRNNCell(nNeurons, activation=act)
+            rnnCell = tf.contrib.rnn.core_rnn_cell.BasicRNNCell(nNeurons, activation=act)
         elif cell == 'gru':
-            rnnCell = tf.nn.rnn_cell.GRUCell(nNeurons, activation=act)
+            rnnCell = tf.contrib.rnn.core_rnn_cell.GRUCell(nNeurons, activation=act)
         elif cell == 'lstm':
-            rnnCell = tf.nn.rnn_cell.LSTMCell(nNeurons, activation=act, use_peepholes=True, forget_bias=1.0) 
+            rnnCell = tf.contrib.rnn.core_rnn_cell.LSTMCell(nNeurons, activation=act, use_peepholes=True, forget_bias=1.0) 
         ret.append(rnnCell)
     if nCells == 1:
         return ret[0]
@@ -47,7 +47,7 @@ def scaleToList(v, l):
             return ret
     return [v for i in range(l)]
 
-def getRnnLayers(stackedDimList, inputData, inputLens, cellTypes='rnn', acts=tf.tanh, rnnTypes='uni'):
+def getRnnLayers(stackedDimList, inputData, inputLens, cellTypes='rnn', acts=tf.tanh, rnnTypes='uni', name=''):
     tmpInputs = inputData
     cellTypes = scaleToList(cellTypes, len(stackedDimList))
     acts = scaleToList(acts, len(stackedDimList))
@@ -58,14 +58,14 @@ def getRnnLayers(stackedDimList, inputData, inputLens, cellTypes='rnn', acts=tf.
         cellType = cellTypes[i]
         act = acts[i]
         rnnType = rnnTypes[i]
-        with tf.variable_scope('layer%d'%i):
+        with tf.variable_scope('%slayer%d'%(name, i)):
             if rnnType == 'bi':
                 cells = getRnnCell(n, cell=cellType, nCells=2, act=act)
                 fwRnnCell = cells[0]
                 bwRnnCell = cells[1]
                 tmpSeq, tmp_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=fwRnnCell, cell_bw=bwRnnCell, dtype=tf.float32, 
                                                                      sequence_length=inputLens, inputs=tmpInputs)
-                tmpInputs = tf.concat(2, [tmpSeq[0], tmpSeq[1]])
+                tmpInputs = tf.concat([tmpSeq[0], tmpSeq[1]], 2)
             elif rnnType == 'uni':
                 cell = getRnnCell(n, cell=cellType, nCells=1, act=act)
                 tmpSeq, tmp_states = tf.nn.dynamic_rnn(cell=cell, dtype=tf.float32, sequence_length=inputLens, inputs=tmpInputs)
@@ -188,13 +188,6 @@ def getRnnTrainOps(maxNumSteps=10, initEmbeddings=None, tokenSize=1,
     # last return is output to screen for debugging purpose
     return inputTokens, inputLens, targets, prediction, loss, initAll, learningStep, gradients, lr, ctc_gradients
 
-# m is a list of lists and each element list in m may have different length;
-# this function pads all element lists to the max length
-def pad_2d_list(m, pad=0):
-    lens = [len(v) for v in m]
-    max_lens = max(lens)
-    res = [v+[pad for _ in range(max_lens-len(v))] for v in m]
-    return res
 
 # NOTE: when task is "ctc", labels need to be a list of lists, where each second-level list corresponds to one sequence
 def trainRnn(docs, labels, embeddingFile, miniBatchSize=-1, initWeightFile=None, trainedWeightFile=None, lr=0.1, epochs=1,
@@ -528,19 +521,19 @@ targets = [[-1,1,1,1,1,1], [1,-1,-1,-1,-1,-1], [1,1,-1,1,-1,1], [1,1,1,1,-1,-1],
 #              nSoftmaxSamples=1, seed=123)
 
 # lists in inputs need to have the same dimension in order to be converted to ndarray later, so dummy placeholder -999 is used
-inputs = [[1.0,2.0,3.0,1.0,5.0,-1.0,3.0,4.0,1.0], [2.0,3.0,-3.0,-1.0,-5.0,-3.0,2.0,6.0,-999],
-          [-1.0,-2.0,2.0,8.0,-5.0,-2.0,1.0,7.0,5.0], [-1.0,-2.0,-3.0,-1.0,-5.0,-4.0,-999,-999,-999]]
-inputLens = [9, 8, 9, 6]
-targets = [[1, 0, 5], [2, 4], [3, 4, 5], [0]]
-trainRnn(inputs, targets, None, docLens=inputLens, nclass=7, miniBatchSize=4,
-         initWeightFile='tmp_outputs/ctc_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_rnn_trained_weights.txt',
-         lr=0.1, epochs=20, rnnType='bi', task='ctc', stackedDimList=[5], cell='rnn', seed=123)
+# inputs = [[1.0,2.0,3.0,1.0,5.0,-1.0,3.0,4.0,1.0], [2.0,3.0,-3.0,-1.0,-5.0,-3.0,2.0,6.0,-999],
+#           [-1.0,-2.0,2.0,8.0,-5.0,-2.0,1.0,7.0,5.0], [-1.0,-2.0,-3.0,-1.0,-5.0,-4.0,-999,-999,-999]]
+# inputLens = [9, 8, 9, 6]
+# targets = [[1, 0, 5], [2, 4], [3, 4, 5], [0]]
+# trainRnn(inputs, targets, None, docLens=inputLens, nclass=7, miniBatchSize=4,
+#          initWeightFile='tmp_outputs/ctc_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_rnn_trained_weights.txt',
+#          lr=0.1, epochs=20, rnnType='bi', task='ctc', stackedDimList=[5], cell='rnn', seed=123)
 
 # lists in inputs need to have the same dimension in order to be converted to ndarray later, so dummy placeholder -999 is used
-inputs = [[1.0,2.0,3.0,1.0,5.0,-1.0,3.0,4.0], [2.0,3.0,-3.0,-1.0,-5.0,-3.0,2.0,6.0],
-          [-1.0,-2.0,2.0,8.0,-5.0,-2.0,1.0,7.0], [-1.0,-2.0,-3.0,-1.0,-5.0,-4.0,-999,-999]]
-inputLens = [4, 3, 4, 3]
-targets = [[1, 0, 5], [2, 4], [3, 4, 5], [0]]
-trainRnn(inputs, targets, None, docLens=inputLens, nclass=7, miniBatchSize=4, tokenSize=2,
-         initWeightFile='tmp_outputs/ctc_t2_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_t2_rnn_trained_weights.txt',
-         lr=0.1, epochs=20, rnnType='bi', task='ctc', stackedDimList=[5], cell='rnn', seed=123)
+# inputs = [[1.0,2.0,3.0,1.0,5.0,-1.0,3.0,4.0], [2.0,3.0,-3.0,-1.0,-5.0,-3.0,2.0,6.0],
+#           [-1.0,-2.0,2.0,8.0,-5.0,-2.0,1.0,7.0], [-1.0,-2.0,-3.0,-1.0,-5.0,-4.0,-999,-999]]
+# inputLens = [4, 3, 4, 3]
+# targets = [[1, 0, 5], [2, 4], [3, 4, 5], [0]]
+# trainRnn(inputs, targets, None, docLens=inputLens, nclass=7, miniBatchSize=4, tokenSize=2,
+#          initWeightFile='tmp_outputs/ctc_t2_rnn_init_weights.txt', trainedWeightFile='tmp_outputs/ctc_t2_rnn_trained_weights.txt',
+#          lr=0.1, epochs=20, rnnType='bi', task='ctc', stackedDimList=[5], cell='rnn', seed=123)
