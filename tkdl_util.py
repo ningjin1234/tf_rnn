@@ -49,7 +49,9 @@ def tokens2ids(tokens, token2IdLookup, unk=None, maxNumSteps=None):
     ids = []
     for t in tokens:
         if not t in token2IdLookup:
-            if unk is not None:
+            if unk < 0:
+                pass
+            elif unk is not None:
                 ids.append(unk)
             else:
                 raise ValueError("no word vector for %s" % t)
@@ -104,11 +106,16 @@ def genTextParms(docs, embeddingFile):
     textParms['token2id'] = token2Id
     return textParms
 
-def get_seq_masks(lens, maxl=None):
+def get_seq_masks(lens, maxl=None, labels=None, weights=None):
     maxl = max(lens) if maxl is None else maxl
-    masks = [[1 if i<l else 0 for i in range(maxl)] for l in lens]
-    masks = np.asarray(masks, dtype=np.float32)
-    return masks
+    if labels is None or weights is None:
+        masks = [[1 if i<l else 0 for i in range(maxl)] for l in lens]
+        masks = np.asarray(masks, dtype=np.float32)
+        return masks
+    else:
+        masks = [[weights[labels[j][i]] if i<lens[j] else 0 for i in range(maxl)] for j in range(len(lens))]
+        masks = np.asarray(masks, dtype=np.float32)
+        return masks
 
 # m is a list of lists and each element list in m may have different length;
 # this function pads all element lists to the max length
@@ -257,11 +264,16 @@ def writeWeightsAux(fout, layerId, wid, matrix):
 class TestTkdlUtil(unittest.TestCase):
     def test_get_seq_masks(self):
         lens = [3,1,0,2]
+        labels = [[1,0,1],[0],[],[0,1]]
+        weights = {1:10, 0:1}
         masks = get_seq_masks(lens)
         expected = np.asarray([[1,1,1],[1,0,0],[0,0,0],[1,1,0]], dtype=np.float32)
         assert_array_equal(expected, masks)
         masks = get_seq_masks(lens, maxl=4)
         expected = np.asarray([[1,1,1,0],[1,0,0,0],[0,0,0,0],[1,1,0,0]], dtype=np.float32)
+        assert_array_equal(expected, masks)
+        masks = get_seq_masks(lens, maxl=4, labels=labels, weights=weights)
+        expected = np.asarray([[10,1,10,0],[1,0,0,0],[0,0,0,0],[1,10,0,0]], dtype=np.float32)
         assert_array_equal(expected, masks)
         print('test_get_seq_masks passed')
     def test_pad_2d_list(self):
@@ -274,7 +286,7 @@ class TestTkdlUtil(unittest.TestCase):
         token2Id, embeddingArray = readEmbeddingFile('data/toy_embeddings.txt')
         testSeqs = [['apple', 'is', 'a', 'company'], ['google', 'is', 'another', 'big', 'company']]
         self.assertEqual(tokens2ids(testSeqs[0], token2Id), [1, 7, 0, 4])
-        self.assertEqual(tokens2ids(testSeqs[1], token2Id), [6, 7, 4])
+        self.assertEqual(tokens2ids(testSeqs[1], token2Id, unk=-1), [6, 7, 4])
         self.assertEqual(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id)), [6, 7, 9, 9, 4])
         self.assertEqual(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=4), [6, 7, 9, 9])
         self.assertEqual(tokens2ids(testSeqs[1], token2Id, unk=len(token2Id), maxNumSteps=7), [6, 7, 9, 9, 4, 0, 0])
@@ -289,9 +301,10 @@ class TestTkdlUtil(unittest.TestCase):
         emb_truth['color'] = [0.0125,0.025,1.0]
         all_tokens = [['google', 'is', 'another', 'company'], ['google', 'is', 'not', 'color', '!']]
         parms = get_text_parms_with_oovs(all_tokens, emb_fname='toyEmbedding3.csv', has_header=True, delimiter=',')
-        self.assertEqual(len(parms['emb']), 14)
+        self.assertEqual(len(parms['emb']), 15)
         emb_arr = parms['emb']
         token2id = parms['token2id']
+        self.assertEqual(emb_arr[token2id[UNK_TOKEN]], [0, 0, 0])
         for t in ['another', 'not', '!']:
             self.assertEqual(emb_arr[token2id[t]], [0.0, 0.0, 0.0])
         for t in ['google', 'is', 'company', 'color']:

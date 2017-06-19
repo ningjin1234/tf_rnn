@@ -3,6 +3,8 @@ from tkdl_util import *
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import ctc_ops
 from tensorflow.python.ops import gradients_impl
+from ln_rnn_cells import LNGRUCell
+from tensorflow.python.ops import rnn_cell_impl
 
 # x is a list of lists, where first dimension is number of batches
 def denseFeedToSparseFeed(x):
@@ -24,8 +26,12 @@ def getRnnCell(nNeurons, cell='rnn', nCells=1, act=tf.tanh):
             rnnCell = tf.contrib.rnn.core_rnn_cell.BasicRNNCell(nNeurons, activation=act)
         elif cell == 'gru':
             rnnCell = tf.contrib.rnn.core_rnn_cell.GRUCell(nNeurons, activation=act)
+        elif cell == 'lngru':
+            rnnCell = LNGRUCell(nNeurons, activation=act)
         elif cell == 'lstm':
             rnnCell = tf.contrib.rnn.core_rnn_cell.LSTMCell(nNeurons, activation=act, use_peepholes=True, forget_bias=1.0) 
+        else:
+            raise ValueError('unsupported cell type %s' % cell)
         ret.append(rnnCell)
     if nCells == 1:
         return ret[0]
